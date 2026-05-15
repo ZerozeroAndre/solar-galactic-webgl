@@ -1,0 +1,597 @@
+:root {
+  color-scheme: dark;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: #030712;
+  color: #e5e7eb;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  background: #030712;
+}
+
+#scene {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.panel {
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  width: min(380px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  padding: 18px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 8px;
+  background: rgba(3, 7, 18, 0.76);
+  backdrop-filter: blur(18px);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+  transition: transform 0.38s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s ease;
+  transform-origin: left center;
+  z-index: 2;
+}
+
+#app.panel-collapsed .panel {
+  transform: translateX(calc(-100% - 32px));
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.panel-toggle {
+  /* Reset нативных button-стилей чтобы избежать любых hover-эффектов от браузера. */
+  appearance: none;
+  -webkit-appearance: none;
+  -webkit-tap-highlight-color: transparent;
+  margin: 0;
+  font: inherit;
+  box-sizing: border-box;
+
+  position: fixed;
+  /* Вертикальная центровка через top вместо transform: translateY(-50%) — некоторые
+     браузеры пересчитывают sub-pixel позицию transform на hover/focus, что давало
+     микро-сдвиг. С фиксированной height: 64px, top = 50% − 32px центрирует точно. */
+  top: calc(50% - 32px);
+  left: calc(16px + min(380px, calc(100vw - 32px)));
+  width: 26px;
+  height: 64px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-left: none;
+  border-radius: 0 10px 10px 0;
+  background: rgba(3, 7, 18, 0.78);
+  backdrop-filter: blur(18px);
+  color: #94a3b8;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition:
+    left 0.38s cubic-bezier(0.4, 0, 0.2, 1),
+    color 0.2s ease,
+    background 0.2s ease,
+    border-color 0.2s ease;
+  z-index: 3;
+  box-shadow: 4px 0 18px rgba(0, 0, 0, 0.28);
+}
+
+.panel-toggle:hover {
+  color: #f1f5f9;
+  background: rgba(15, 23, 42, 0.92);
+  border-color: rgba(148, 163, 184, 0.45);
+}
+
+.panel-toggle:focus {
+  outline: none;
+}
+
+.panel-toggle:focus-visible {
+  outline: 2px solid rgba(56, 189, 248, 0.6);
+  outline-offset: 1px;
+}
+
+.panel-toggle .chev {
+  display: inline-block;
+  width: 14px;
+  text-align: center;
+  transition: transform 0.38s cubic-bezier(0.4, 0, 0.2, 1);
+  line-height: 1;
+}
+
+#app.panel-collapsed .panel-toggle {
+  left: 0;
+}
+
+#app.panel-collapsed .panel-toggle .chev {
+  transform: rotate(180deg);
+}
+
+.eyebrow {
+  margin: 0 0 4px;
+  color: #38bdf8;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+h1 {
+  margin: 0 0 18px;
+  font-size: 1.22rem;
+  line-height: 1.2;
+}
+
+.control-group,
+.toggles,
+.facts,
+.planet-list,
+.mode-selector {
+  margin-top: 14px;
+}
+
+/* Режимы: tab-style переключатель в верхней части панели. */
+.mode-selector {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 4px;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 8px;
+}
+
+.mode-btn {
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: #94a3b8;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  padding: 8px 10px;
+  transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+}
+
+.mode-btn:hover {
+  color: #e5e7eb;
+  background: rgba(56, 189, 248, 0.08);
+}
+
+.mode-btn.active {
+  background: rgba(56, 189, 248, 0.22);
+  color: #f1f5f9;
+  border-color: rgba(56, 189, 248, 0.5);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.mode-btn:focus-visible {
+  outline: 2px solid rgba(56, 189, 248, 0.6);
+  outline-offset: 1px;
+}
+
+/* Hide sections that don't apply to current mode. */
+body.mode-solar .galactic-only,
+body.mode-galactic .solar-only {
+  display: none !important;
+}
+
+label {
+  display: block;
+  color: #cbd5e1;
+  font-size: 0.82rem;
+  font-weight: 650;
+}
+
+input[type="range"] {
+  width: 100%;
+  margin: 10px 0 6px;
+  accent-color: #38bdf8;
+}
+
+select,
+button {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 7px;
+  background: rgba(15, 23, 42, 0.86);
+  color: #f8fafc;
+  font: inherit;
+}
+
+select {
+  margin-top: 8px;
+  padding: 0 10px;
+}
+
+button {
+  cursor: pointer;
+  transition: transform 140ms ease, border-color 140ms ease, background 140ms ease;
+}
+
+button:hover {
+  transform: translateY(-1px);
+  border-color: rgba(56, 189, 248, 0.62);
+  background: rgba(30, 41, 59, 0.9);
+}
+
+button.primary {
+  border-color: rgba(251, 191, 36, 0.5);
+  background: rgba(120, 53, 15, 0.62);
+}
+
+.control-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.readout {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: #94a3b8;
+  font-size: 0.78rem;
+}
+
+.toggles {
+  display: grid;
+  gap: 8px;
+}
+
+.toggles label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 560;
+}
+
+.toggles input {
+  accent-color: #38bdf8;
+}
+
+.facts {
+  display: grid;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.facts div,
+.planet-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.78rem;
+}
+
+.facts span,
+.planet-row span {
+  color: #94a3b8;
+}
+
+.facts strong,
+.planet-row strong {
+  color: #f8fafc;
+  text-align: right;
+  font-weight: 700;
+}
+
+.webgl-warning {
+  margin-top: 14px;
+  padding: 10px 12px;
+  border: 1px solid rgba(251, 191, 36, 0.4);
+  border-radius: 7px;
+  background: rgba(120, 53, 15, 0.48);
+  color: #fde68a;
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.planet-list {
+  display: grid;
+  gap: 6px;
+}
+
+.planet-row {
+  min-height: 28px;
+  padding: 6px 8px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.54);
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.planet-row i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+
+.planet-row strong {
+  font-size: 11px;
+  color: #cbd5e1;
+  font-weight: 500;
+}
+
+.trail-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: #94a3b8;
+  cursor: pointer;
+  user-select: none;
+}
+
+.trail-toggle input {
+  margin: 0;
+}
+
+.planet-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.readout-hint {
+  color: #64748b;
+  font-size: 10px;
+  font-style: italic;
+}
+
+.inline-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 11px;
+  color: #94a3b8;
+  cursor: pointer;
+}
+
+.inline-toggle input {
+  margin: 0;
+}
+
+.city-picker {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px;
+  margin: 6px 0 4px;
+}
+
+#cityInput {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 6px;
+  color: #e5e7eb;
+  padding: 7px 10px;
+  font-size: 12px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.18s ease, background 0.18s ease;
+}
+
+#cityInput::placeholder {
+  color: #64748b;
+}
+
+#cityInput:focus {
+  border-color: rgba(56, 189, 248, 0.6);
+  background: rgba(15, 23, 42, 0.85);
+}
+
+#cityInput::-webkit-search-cancel-button {
+  filter: invert(0.55);
+  cursor: pointer;
+}
+
+#geoBtn {
+  background: rgba(56, 189, 248, 0.18);
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  border-radius: 6px;
+  color: #e5e7eb;
+  padding: 4px 10px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.18s ease, transform 0.1s ease;
+}
+
+#geoBtn:hover {
+  background: rgba(56, 189, 248, 0.32);
+}
+
+#geoBtn:active {
+  transform: scale(0.96);
+}
+
+.city-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 5;
+  max-height: 260px;
+  overflow-y: auto;
+  background: rgba(3, 7, 18, 0.96);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  padding: 4px;
+  animation: dropdown-in 0.16s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes dropdown-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.city-option {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: baseline;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 12px;
+  color: #e5e7eb;
+  user-select: none;
+  line-height: 1.3;
+}
+
+.city-option:hover,
+.city-option.highlighted {
+  background: rgba(56, 189, 248, 0.18);
+}
+
+.city-option .city-name {
+  font-weight: 500;
+}
+
+.city-option .city-name mark {
+  background: transparent;
+  color: #7dd3fc;
+  font-weight: 700;
+}
+
+.city-option .city-country {
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 400;
+  margin-left: 6px;
+}
+
+.city-option .city-coord {
+  color: #64748b;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.city-empty {
+  padding: 10px;
+  font-size: 11px;
+  color: #64748b;
+  text-align: center;
+}
+
+.location-label {
+  font-size: 11px;
+  color: #94a3b8;
+  margin-bottom: 6px;
+  padding: 0 2px;
+  line-height: 1.4;
+}
+
+.location-label.has-location {
+  color: #cbd5e1;
+}
+
+.location-label .location-name {
+  color: #7dd3fc;
+  font-weight: 500;
+}
+
+.sky-list {
+  display: grid;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.sky-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 8px;
+  align-items: center;
+  padding: 4px 8px;
+  font-size: 11px;
+  border-radius: 4px;
+  background: rgba(15, 23, 42, 0.4);
+}
+
+.sky-row.above-horizon {
+  background: rgba(34, 197, 94, 0.08);
+  border-left: 2px solid rgba(34, 197, 94, 0.6);
+}
+
+.sky-row.below-horizon {
+  opacity: 0.45;
+}
+
+.sky-row i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.sky-row .sky-coord {
+  color: #cbd5e1;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.sky-empty {
+  color: #64748b;
+  font-size: 11px;
+  text-align: center;
+  padding: 6px;
+}
+
+.tooltip {
+  position: fixed;
+  z-index: 3;
+  pointer-events: none;
+  padding: 7px 9px;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 6px;
+  background: rgba(2, 6, 23, 0.88);
+  color: #f8fafc;
+  font-size: 0.78rem;
+  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.32);
+}
+
+@media (max-width: 760px) {
+  .panel {
+    top: auto;
+    bottom: 12px;
+    left: 12px;
+    width: calc(100vw - 24px);
+    max-height: 45vh;
+    padding: 14px;
+  }
+
+  h1 {
+    font-size: 1rem;
+    margin-bottom: 12px;
+  }
+}

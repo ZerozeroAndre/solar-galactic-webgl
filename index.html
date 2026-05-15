@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Solar System in Galactic Motion</title>
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="scene"></canvas>
+      <button id="panelToggle" class="panel-toggle" type="button" aria-label="Toggle panel" title="Toggle panel (P)"><span class="chev">‹</span></button>
+      <aside class="panel">
+        <header>
+          <p class="eyebrow">WebGL orbital model</p>
+          <h1>Solar System in Galactic Motion</h1>
+        </header>
+
+        <section class="mode-selector" role="tablist" aria-label="Scale mode">
+          <button class="mode-btn active" data-mode="solar" type="button" role="tab" aria-selected="true">Solar System</button>
+          <button class="mode-btn" data-mode="galactic" type="button" role="tab" aria-selected="false">Galactic</button>
+        </section>
+
+        <section class="control-group">
+          <label for="timeScale">Simulation speed</label>
+          <input id="timeScale" type="range" min="0" max="4" step="0.01" value="0" />
+          <div class="readout"><span id="speedLabel">1 day / sec</span><span id="dateLabel"></span></div>
+          <label class="inline-toggle"><input id="realtimeToggle" type="checkbox" /> Real time (now)</label>
+        </section>
+
+        <section class="control-grid">
+          <button id="pauseBtn" class="primary" type="button">Pause</button>
+          <button id="resetBtn" type="button">Reset date</button>
+          <button id="topBtn" type="button">Top view</button>
+          <button id="tiltBtn" type="button">Tilt view</button>
+          <button id="followSunBtn" type="button">Follow Sun</button>
+          <button id="overviewBtn" type="button">Galactic overview</button>
+        </section>
+
+        <section class="control-group galactic-only">
+          <label for="frameSelect">Reference frame</label>
+          <select id="frameSelect">
+            <option value="galactic" selected>Galactic: Sun orbits MW center</option>
+            <option value="extragalactic">Extragalactic: MW drifts through space</option>
+          </select>
+        </section>
+
+        <section class="control-group galactic-only">
+          <label for="orbitPeriodSlider">Galactic orbit period</label>
+          <input id="orbitPeriodSlider" type="range" min="2.301" max="8.352" step="0.05" value="2.301" />
+          <div class="readout"><span id="orbitPeriodLabel">200 years (compressed)</span><span class="readout-hint">slide → real 225 Myr</span></div>
+        </section>
+
+        <section class="control-group">
+          <label for="focusSelect">Camera focus</label>
+          <select id="focusSelect"></select>
+        </section>
+
+        <section class="toggles">
+          <label><input id="trailsToggle" type="checkbox" checked /> Live accumulated trails</label>
+          <label class="galactic-only"><input id="galaxyToggle" type="checkbox" checked /> Milky Way & galactic path</label>
+          <label class="galactic-only"><input id="starsToggle" type="checkbox" checked /> Bright stars (Hipparcos ≤ mag 6)</label>
+          <label class="galactic-only"><input id="constellationsToggle" type="checkbox" /> Constellation lines</label>
+          <label><input id="labelsToggle" type="checkbox" checked /> Labels</label>
+        </section>
+
+        <section class="facts">
+          <div><span>Sun speed around Milky Way</span><strong>~230 km/s</strong></div>
+          <div><span>Galactic orbit period</span><strong>~225 Myr</strong></div>
+          <div><span>Planet positions</span><strong>Keplerian J2000</strong></div>
+          <div><span>Default frame</span><strong>Galactic world-space</strong></div>
+          <div><span>Visual scale</span><strong>AU amplified, galactic drift compressed</strong></div>
+        </section>
+
+        <section class="control-group sky-section solar-only">
+          <label>Tonight's sky</label>
+          <div class="city-picker" role="combobox" aria-haspopup="listbox" aria-expanded="false">
+            <input id="cityInput" type="search" autocomplete="off" spellcheck="false" placeholder="Search city…" aria-label="Search city" aria-controls="cityDropdown" aria-autocomplete="list" />
+            <button id="geoBtn" type="button" title="Use my location" aria-label="Use my location">📍</button>
+            <div id="cityDropdown" class="city-dropdown" role="listbox" hidden></div>
+          </div>
+          <div id="locationLabel" class="location-label">No location set</div>
+          <div class="sky-list" id="skyList"></div>
+        </section>
+
+        <section class="planet-list solar-only" id="planetList"></section>
+      </aside>
+      <div id="tooltip" class="tooltip" hidden></div>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

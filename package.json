@@ -1,0 +1,17 @@
+{
+  "name": "solar-galactic-webgl",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 5178 --strictPort",
+    "build": "vite build",
+    "preview": "vite preview --host 127.0.0.1 --port 5178 --strictPort",
+    "test": "node scripts/verify-orbits.mjs"
+  },
+  "dependencies": {
+    "vite": "^7.1.12",
+    "three": "^0.181.2"
+  },
+  "devDependencies": {}
+}
