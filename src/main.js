@@ -216,13 +216,18 @@ function jumpToFocus(name, offsetOverride = null) {
 }
 
 // --- texture loader & planet materials --------------------------------------
-// Реальные текстуры Solar System Scope (CC BY 4.0) в public/textures/,
-// сервятся Vite по корневому /textures/*.
+// Реальные текстуры Solar System Scope (CC BY 4.0) в public/textures/.
+// В dev — Vite сервит их с корня. В prod (GitHub Pages) сайт живёт по
+// /solar-galactic-webgl/, поэтому подмешиваем base через import.meta.env.BASE_URL.
+const ASSET_BASE = import.meta.env.BASE_URL; // '/' в dev, '/solar-galactic-webgl/' в prod
+function assetUrl(path) {
+  return ASSET_BASE + (path.startsWith('/') ? path.slice(1) : path);
+}
 
 const textureLoader = new THREE.TextureLoader();
 
 function loadTex(path, srgb = true) {
-  const t = textureLoader.load(path);
+  const t = textureLoader.load(assetUrl(path));
   t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
   t.anisotropy = 8;
   return t;
@@ -924,8 +929,8 @@ function buildConstellationLines(linesJson) {
 async function loadSkyCatalog() {
   try {
     const [stars, lines] = await Promise.all([
-      fetch('/data/stars.6.json').then((r) => r.json()),
-      fetch('/data/constellations.lines.json').then((r) => r.json())
+      fetch(assetUrl('/data/stars.6.json')).then((r) => r.json()),
+      fetch(assetUrl('/data/constellations.lines.json')).then((r) => r.json())
     ]);
     starsGroup.add(buildStarsMesh(stars));
     constellationsGroup.add(buildConstellationLines(lines));
