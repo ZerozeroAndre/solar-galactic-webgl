@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <radialGradient id="sun" cx="50%" cy="45%" r="55%">
+      <stop offset="0%" stop-color="#fff7ed"/>
+      <stop offset="35%" stop-color="#fde047"/>
+      <stop offset="70%" stop-color="#f97316"/>
+      <stop offset="100%" stop-color="#b91c1c"/>
+    </radialGradient>
+    <radialGradient id="space" cx="50%" cy="50%" r="65%">
+      <stop offset="0%" stop-color="#1e1b4b"/>
+      <stop offset="100%" stop-color="#020617"/>
+    </radialGradient>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#fde047" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#fde047" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="64" height="64" rx="12" fill="url(#space)"/>
+  <!-- distant galactic disk hint -->
+  <ellipse cx="32" cy="32" rx="29" ry="6" fill="none" stroke="#3b82f6" stroke-width="0.8" opacity="0.28" transform="rotate(-28 32 32)"/>
+  <!-- main planet orbit, leading arc bright -->
+  <path d="M 11.5,37.5 A 23 8.5 -25 1 1 49.5,28.5" fill="none" stroke="#06b6d4" stroke-width="1.8" stroke-linecap="round" opacity="0.92"/>
+  <!-- trailing arc faint -->
+  <path d="M 49.5,28.5 A 23 8.5 -25 0 1 11.5,37.5" fill="none" stroke="#06b6d4" stroke-width="1.2" opacity="0.22"/>
+  <!-- sun glow halo -->
+  <circle cx="32" cy="32" r="14" fill="url(#glow)"/>
+  <!-- sun core -->
+  <circle cx="32" cy="32" r="8.5" fill="url(#sun)"/>
+  <!-- leading planet (small blue) -->
+  <circle cx="47.5" cy="29" r="2.2" fill="#7dd3fc"/>
+  <circle cx="47.5" cy="29" r="3.2" fill="#7dd3fc" opacity="0.35"/>
+</svg>

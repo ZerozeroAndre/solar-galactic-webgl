@@ -29,12 +29,6 @@ galactic year runs in ~200 simulated years instead of 225 Myr.*
 *Extragalactic reference frame. The MW center itself drifts ~552 km/s toward the
 Great Attractor (Hydra-Centaurus) in the CMB rest frame, leaving its own trail.*
 
-### Tonight's sky panel
-
-![Tonight's sky panel — which planets are above the horizon](docs/screenshots/tonight-sky.jpg)
-*Pick a city or use geolocation — the panel lists which planets are above the
-horizon right now, ordered by altitude.*
-
 ## Features
 
 ### Solar mode
