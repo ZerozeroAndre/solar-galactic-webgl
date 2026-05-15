@@ -7,6 +7,34 @@ optionally, through the CMB rest frame).
 
 **Live demo:** https://zerozeroandre.github.io/solar-galactic-webgl/
 
+## Screenshots
+
+### Solar mode
+
+![Solar mode — overview of inner and outer planets](docs/screenshots/solar-overview.jpg)
+*All eight planets on their Keplerian orbits. The brighter leading arc of each
+orbit shows the half the planet is heading into; the trailing arc fades.*
+
+![Solar mode — live trails with hot leading edge](docs/screenshots/solar-earth-trail.jpg)
+*Inner planets with live trails on: each trail brightens and white-shifts toward
+the planet's current position (the "comet head" effect).*
+
+### Galactic mode
+
+![Galactic mode — Sun orbiting Milky Way center](docs/screenshots/galactic-orbit.jpg)
+*The Sun on a circular orbit around the Milky Way center, time-compressed so one
+galactic year runs in ~200 simulated years instead of 225 Myr.*
+
+![Galactic mode — extragalactic frame, MW drifting through CMB rest frame](docs/screenshots/galactic-extragalactic.jpg)
+*Extragalactic reference frame. The MW center itself drifts ~552 km/s toward the
+Great Attractor (Hydra-Centaurus) in the CMB rest frame, leaving its own trail.*
+
+### Tonight's sky panel
+
+![Tonight's sky panel — which planets are above the horizon](docs/screenshots/tonight-sky.jpg)
+*Pick a city or use geolocation — the panel lists which planets are above the
+horizon right now, ordered by altitude.*
+
 ## Features
 
 ### Solar mode
