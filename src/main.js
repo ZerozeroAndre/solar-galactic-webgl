@@ -2,6 +2,7 @@ import './styles.css';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { formatBodyCard } from './bodyData.js';
+import { formatConstellationCard } from './constellationData.js';
 import { advanceNBody, getNBodyPosition, resetNBody, isNBodyReady } from './nbody.js';
 import {
   AU_SCALE,
@@ -152,6 +153,11 @@ controls.touches = {
 };
 
 const raycaster = new THREE.Raycaster();
+// Линии созвездий — тонкие (1 vertex wide), default threshold 1 — попасть невозможно.
+// Бампаем до 25 (~ полпикселя при наших дистанциях). На sphere radius 2100 это
+// угловой допуск ~0.68° — достаточно широкий для удобства клика, не слишком
+// агрессивный чтобы случайно ловить соседние линии.
+raycaster.params.Line.threshold = 25;
 const pointer = new THREE.Vector2();
 const clock = new THREE.Clock();
 
@@ -1228,7 +1234,10 @@ function buildConstellationLines(linesJson) {
       const geom = new THREE.BufferGeometry().setFromPoints(pts);
       const line = new THREE.Line(geom, material);
       line.frustumCulled = false;
+      // Маркируем для raycast'а — type='constellation' + ID из JSON ('Ori', 'UMa', etc.)
+      line.userData = { type: 'constellation', constellationId: f.id, label: f.id };
       group.add(line);
+      selectable.push(line);
     }
   }
   group.name = 'IAU constellations';
@@ -2186,11 +2195,18 @@ function positionTooltip(x, y) {
 }
 
 function showBodyCard(object, x, y, pinned = false) {
-  const label = object.userData.label;
-  const dynState = (object.userData.type === 'planet')
-    ? planetObjects.get(label)?.state
-    : null;
-  tooltip.innerHTML = formatBodyCard(label, dynState);
+  const ud = object.userData;
+  let html;
+  if (ud.type === 'constellation') {
+    html = formatConstellationCard(ud.constellationId);
+  } else {
+    const label = ud.label;
+    const dynState = (ud.type === 'planet')
+      ? planetObjects.get(label)?.state
+      : null;
+    html = formatBodyCard(label, dynState);
+  }
+  tooltip.innerHTML = html;
   tooltip.hidden = false;
   tooltip.classList.toggle('pinned', pinned);
   // Need to set position after innerHTML so getBoundingClientRect is accurate.
@@ -2233,9 +2249,11 @@ function onPointerDown(event) {
   const hits = raycaster.intersectObjects(selectable, false);
   if (hits.length) {
     const obj = hits[0].object;
-    // Снапим камеру близко к телу (auto-zoom через jumpToFocus) и переключаем
-    // focus dropdown. Раньше делался только setFocus — камера оставалась далеко.
-    jumpToFocus(obj.userData.label);
+    // Снапим камеру к телу — только для реальных объектов с позицией.
+    // Constellations — линии на небесной сфере без точки, camera не двигаем.
+    if (obj.userData.type !== 'constellation') {
+      jumpToFocus(obj.userData.label);
+    }
     // На touch — закрепляем карточку чтобы пользователь успел прочитать.
     // На desktop тоже закрепим — пока не кликнут в пустое место.
     showBodyCard(obj, event.clientX, event.clientY, true);
