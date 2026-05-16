@@ -121,6 +121,11 @@ controls.dampingFactor = 0.055;
 controls.minDistance = 0.1;
 controls.maxDistance = 2400;
 controls.target.set(285, 0, 0);
+// Touch жесты: один палец = вращение, два = pinch zoom + pan (стандарт мобильных карт).
+controls.touches = {
+  ONE: THREE.TOUCH.ROTATE,
+  TWO: THREE.TOUCH.DOLLY_PAN
+};
 
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
@@ -1595,6 +1600,10 @@ function togglePanel() {
   appEl.classList.toggle('panel-collapsed');
 }
 panelToggle.addEventListener('click', togglePanel);
+// На мобильных стартуем со свёрнутой панелью — пользователь сразу видит сцену.
+if (window.matchMedia && window.matchMedia('(max-width: 760px)').matches) {
+  appEl.classList.add('panel-collapsed');
+}
 
 // --- Mode switching ---------------------------------------------------------
 // Solar System mode — планетная шкала (AU), Sun стационарный (heliocentric).

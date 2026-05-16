@@ -580,18 +580,219 @@ button.primary {
   box-shadow: 0 12px 26px rgba(0, 0, 0, 0.32);
 }
 
+/* ---------- Mobile (≤ 760px): bottom-sheet panel + FAB toggle -------------- */
 @media (max-width: 760px) {
+  /* Panel = bottom sheet, full width, slides up from bottom */
   .panel {
     top: auto;
-    bottom: 12px;
-    left: 12px;
-    width: calc(100vw - 24px);
-    max-height: 45vh;
-    padding: 14px;
+    bottom: 0;
+    left: 0;
+    width: 100vw;
+    max-height: 75vh;
+    padding: 22px 14px calc(14px + env(safe-area-inset-bottom, 0px));
+    border-radius: 16px 16px 0 0;
+    border-left: none;
+    border-right: none;
+    border-bottom: none;
+    transform-origin: bottom center;
+    /* Smoother slide on touch */
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Drag handle bar at the top of the sheet */
+  .panel::before {
+    content: '';
+    position: absolute;
+    top: 6px;
+    left: 50%;
+    width: 44px;
+    height: 4px;
+    margin-left: -22px;
+    border-radius: 2px;
+    background: rgba(148, 163, 184, 0.45);
+    pointer-events: none;
+  }
+
+  /* Collapsed state: slide off-screen down */
+  #app.panel-collapsed .panel {
+    transform: translateY(100%);
+    opacity: 1;
+  }
+
+  /* Toggle = floating action button (top-right) */
+  .panel-toggle {
+    top: calc(env(safe-area-inset-top, 0px) + 12px);
+    left: auto;
+    right: 12px;
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    border-left: 1px solid rgba(148, 163, 184, 0.22);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    transition: background 0.2s ease, border-color 0.2s ease;
+  }
+
+  #app.panel-collapsed .panel-toggle {
+    left: auto;
+  }
+
+  /* Replace chevron with menu/close icons */
+  .panel-toggle .chev {
+    font-size: 0;
+    width: auto;
+    transform: none !important;
+  }
+
+  .panel-toggle .chev::after {
+    font-size: 22px;
+    line-height: 1;
+    color: #cbd5e1;
+  }
+
+  #app:not(.panel-collapsed) .panel-toggle .chev::after {
+    content: '✕';
+    font-weight: 300;
+  }
+
+  #app.panel-collapsed .panel-toggle .chev::after {
+    content: '☰';
   }
 
   h1 {
     font-size: 1rem;
-    margin-bottom: 12px;
+    margin: 4px 0 12px;
   }
+
+  .eyebrow {
+    font-size: 0.68rem;
+  }
+
+  /* Larger touch targets — Apple HIG minimum 44pt */
+  button,
+  select,
+  #geoBtn,
+  .city-option {
+    min-height: 44px;
+  }
+
+  .mode-btn {
+    padding: 12px 10px;
+    font-size: 13px;
+    min-height: 44px;
+  }
+
+  .control-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  /* Bigger slider thumb / track for fingers */
+  input[type="range"] {
+    height: 36px;
+    margin: 8px 0 4px;
+  }
+
+  input[type="range"]::-webkit-slider-thumb {
+    width: 22px;
+    height: 22px;
+  }
+
+  /* Toggles — bigger checkboxes, more padding for tap area */
+  .toggles {
+    gap: 4px;
+  }
+
+  .toggles label {
+    padding: 10px 4px;
+    font-size: 0.92rem;
+    min-height: 44px;
+  }
+
+  .toggles input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+  }
+
+  .inline-toggle {
+    padding: 8px 0;
+    font-size: 13px;
+    min-height: 36px;
+  }
+
+  .inline-toggle input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+  }
+
+  /* Planet rows: bigger tap areas */
+  .planet-row {
+    min-height: 40px;
+    padding: 8px 10px;
+    font-size: 0.86rem;
+  }
+
+  .planet-row strong {
+    font-size: 12px;
+  }
+
+  .trail-toggle {
+    font-size: 13px;
+    padding: 6px 4px;
+  }
+
+  .trail-toggle input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+  }
+
+  /* City picker: more readable */
+  #cityInput {
+    padding: 12px;
+    font-size: 16px; /* 16+ prevents iOS auto-zoom on focus */
+    min-height: 44px;
+  }
+
+  .city-option {
+    padding: 12px 10px;
+    font-size: 14px;
+  }
+
+  .readout {
+    font-size: 0.82rem;
+  }
+
+  /* Sky list rows */
+  .sky-row {
+    padding: 8px 10px;
+    font-size: 12px;
+    min-height: 36px;
+  }
+}
+
+/* Touch-only devices: kill hover transforms/flickers (sticky :hover after tap) */
+@media (hover: none) {
+  button:hover,
+  .mode-btn:hover,
+  .panel-toggle:hover,
+  #geoBtn:hover,
+  .city-option:hover {
+    transform: none;
+    background: inherit;
+    border-color: inherit;
+    color: inherit;
+  }
+
+  /* Restore the only hover we still need — active mode tab — via :active */
+  .mode-btn.active {
+    background: rgba(56, 189, 248, 0.22);
+    color: #f1f5f9;
+    border-color: rgba(56, 189, 248, 0.5);
+  }
+}
+
+/* Canvas: prevent browser gestures (double-tap zoom, scroll) interfering with OrbitControls */
+#scene {
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
