@@ -13,6 +13,7 @@ import {
   applyEclipticTilt,
   comets,
   dwarfPlanets,
+  spacecraft,
   eclipticFromCartesian,
   eclipticToEquatorial,
   equatorialToHorizontal,
@@ -46,6 +47,7 @@ const asteroidBeltToggle = document.querySelector('#asteroidBeltToggle');
 const kuiperBeltToggle = document.querySelector('#kuiperBeltToggle');
 const trojansToggle = document.querySelector('#trojansToggle');
 const cometsToggle = document.querySelector('#cometsToggle');
+const spacecraftToggle = document.querySelector('#spacecraftToggle');
 const nbodyTmpVec = new THREE.Vector3();
 const labelsToggle = document.querySelector('#labelsToggle');
 const planetList = document.querySelector('#planetList');
@@ -222,6 +224,20 @@ function setFocus(name, mode = cameraMode) {
 function jumpToFocus(name, offsetOverride = null) {
   const focused = planetObjects.get(name);
   if (!focused) return;
+  // Авто-включение соответствующего toggle если фокусимся на скрытом теле.
+  // Иначе пользователь zoom'ится в правильную точку, но видит пустоту (тело hidden).
+  const dwarfNames = ['Ceres', 'Pluto', 'Haumea', 'Makemake', 'Eris', 'Sedna', 'Charon', 'Dysnomia'];
+  const cometNames = ['Halley', 'Hale-Bopp'];
+  const spacecraftNames = ['Voyager 1', 'Voyager 2', 'New Horizons', 'Parker Solar Probe'];
+  if (dwarfNames.includes(name) && !dwarfPlanetsToggle.checked) {
+    dwarfPlanetsToggle.checked = true;
+  }
+  if (cometNames.includes(name) && !cometsToggle.checked) {
+    cometsToggle.checked = true;
+  }
+  if (spacecraftNames.includes(name) && !spacecraftToggle.checked) {
+    spacecraftToggle.checked = true;
+  }
   focused.mesh.getWorldPosition(focused.worldPosition);
 
   // Автоматический zoom: расстояние камеры подбирается из размера тела.
@@ -902,6 +918,72 @@ function createComet(cometData) {
   return { nucleus, tail, data: cometData, state: null };
 }
 
+// Spacecraft icon — рисуется в canvas один раз и используется как sprite texture.
+// Cross + circle — традиционный navigation symbol в orbital diagrams.
+function makeSpacecraftIcon(hexColor) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 64;
+  canvas.height = 64;
+  const ctx = canvas.getContext('2d');
+  const cssColor = `#${hexColor.toString(16).padStart(6, '0')}`;
+  ctx.strokeStyle = cssColor;
+  ctx.fillStyle = cssColor;
+  ctx.lineWidth = 3;
+  // Outer ring
+  ctx.beginPath();
+  ctx.arc(32, 32, 14, 0, Math.PI * 2);
+  ctx.stroke();
+  // Cross
+  ctx.beginPath();
+  ctx.moveTo(32, 4); ctx.lineTo(32, 60);
+  ctx.moveTo(4, 32); ctx.lineTo(60, 32);
+  ctx.stroke();
+  // Center dot
+  ctx.beginPath();
+  ctx.arc(32, 32, 3, 0, Math.PI * 2);
+  ctx.fill();
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.needsUpdate = true;
+  return tex;
+}
+
+function createSpacecraft(craftData) {
+  const tex = makeSpacecraftIcon(craftData.color);
+  const spriteMat = new THREE.SpriteMaterial({
+    map: tex,
+    color: 0xffffff,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    fog: false
+  });
+  const sprite = new THREE.Sprite(spriteMat);
+  sprite.scale.set(2, 2, 1); // scene units — visible on any zoom
+  sprite.name = craftData.name;
+  sprite.userData = { label: craftData.name, type: 'spacecraft', spacecraft: craftData };
+  return { sprite, data: craftData, state: null, position: new THREE.Vector3() };
+}
+
+// Compute spacecraft position at given simDate.
+// Returns null if before launchDate (spacecraft не существует ещё).
+function computeSpacecraftPosition(craftData, simDate) {
+  const launch = new Date(craftData.launchDate);
+  if (simDate.getTime() < launch.getTime()) return null;
+  const motion = craftData.motion;
+  if (motion.type === 'linear') {
+    const yearsSinceJ2000 = (simDate.getTime() - J2000) / (365.25 * MS_PER_DAY);
+    return new THREE.Vector3(
+      (motion.posAtJ2000[0] + motion.velocity[0] * yearsSinceJ2000) * AU_SCALE,
+      (motion.posAtJ2000[1] + motion.velocity[1] * yearsSinceJ2000) * AU_SCALE,
+      (motion.posAtJ2000[2] + motion.velocity[2] * yearsSinceJ2000) * AU_SCALE
+    );
+  }
+  if (motion.type === 'kepler') {
+    return planetState(motion, simDate).position;
+  }
+  return null;
+}
+
 function addMilkyWayDisk() {
   // ── Слой 1 (плоская ESO-текстура) — УДАЛЁН ─────────────────────────────
   // Плоский PlaneGeometry со sticker-видом галактики не имел физического смысла
@@ -1222,6 +1304,7 @@ let asteroidBeltMesh = null;
 let kuiperBeltMesh = null;
 let trojansAnchor = null;
 const cometObjects = []; // [{ nucleus, tail, data, state, orbit?, label, trail }]
+const spacecraftObjects = []; // [{ sprite, data, position, label, trail }]
 
 function buildScene() {
   addSkybox();
@@ -1274,6 +1357,34 @@ function buildScene() {
       state: null,
       worldPosition: new THREE.Vector3(),
       isComet: true
+    });
+  }
+
+  // Spacecraft — sprite + label + trail. Без статичной орбиты (траектории —
+  // гиперболические escape или PSP-elliptic, в обоих случаях рисуем только trail).
+  for (const craftData of spacecraft) {
+    const c = createSpacecraft(craftData);
+    solarRoot.add(c.sprite);
+    selectable.push(c.sprite);
+    c.label = makeLabel(craftData.name, '#e0e7ff');
+    c.label.scale.set(4.5, 1.15, 1);
+    solarRoot.add(c.label);
+    c.trail = makeTrail(craftData.color);
+    trailRoot.add(c.trail.line);
+    c.sprite.visible = false;
+    c.label.visible = false;
+    c.trail.line.visible = false;
+    spacecraftObjects.push(c);
+    planetObjects.set(craftData.name, {
+      mesh: c.sprite,
+      orbit: null,
+      label: c.label,
+      trail: c.trail,
+      moonAnchor: null,
+      moons: [],
+      state: null,
+      worldPosition: c.position,
+      isSpacecraft: true
     });
   }
 
@@ -1492,8 +1603,9 @@ function buildUi() {
     const moonsForPlanet = MOONS[p.name] || [];
     for (const m of moonsForPlanet) focusOptions.push(`  ↳ ${m.name}`);
   }
-  // Comets — также в dropdown
+  // Comets и spacecraft — также в dropdown
   for (const c of comets) focusOptions.push(c.name);
+  for (const c of spacecraft) focusOptions.push(c.name);
   focusSelect.innerHTML = focusOptions
     .map((label) => {
       const value = label.startsWith('  ↳ ') ? label.slice(4) : label;
@@ -1680,6 +1792,14 @@ function appendLiveTrailSamples(fromDate, toDate, referenceFrame) {
       for (const cometData of comets) {
         const obj = planetObjects.get(cometData.name);
         if (obj) pushTrailSample(obj.trail, planetTrailPoint(cometData, sampleDate, referenceFrame), sampleTime);
+      }
+    }
+    // Spacecraft trails — отдельно (не Kepler-based для Voyagers/NH)
+    if (spacecraftToggle.checked) {
+      for (const craftData of spacecraft) {
+        const obj = planetObjects.get(craftData.name);
+        const pos = computeSpacecraftPosition(craftData, sampleDate);
+        if (obj && pos) pushTrailSample(obj.trail, pos, sampleTime);
       }
     }
   }
@@ -1890,30 +2010,31 @@ function updateScene(deltaSeconds) {
   }
 
   // ── Comets per-frame update ──────────────────────────────────────────────
-  // Nucleus position по Kepler; tail orientated anti-solar и billboard'ится
-  // вокруг этой оси чтобы лицом к камере. Длина и яркость ∝ 1/r².
+  // Позиции nucleus всегда обновляем (для focus camera). Tail orientation/intensity
+  // только при видимости. При r > 5 AU хвост скрыт.
   const cometsVisible = beltsInSolar && cometsToggle.checked;
   for (const c of cometObjects) {
-    c.nucleus.visible = cometsVisible;
-    c.tail.visible = cometsVisible;
-    c.label.visible = cometsVisible && labelsToggle.checked;
-    c.trail.line.visible = cometsVisible && trailsToggle.checked;
-    if (c.orbit) c.orbit.visible = cometsVisible && trailsToggle.checked;
-    if (!cometsVisible) continue;
-
+    // Всегда обновляем Kepler-state и position — чтобы focus работал даже при toggle off.
     const state = planetState(c.data, simDate);
     c.state = state;
     c.nucleus.position.copy(state.position);
-    c.nucleus.getWorldPosition(c.nucleus.userData.worldPosition = c.nucleus.userData.worldPosition || new THREE.Vector3());
     c.label.position.copy(state.position).add(new THREE.Vector3(0, c.data.radius + 0.5, 0));
     c.label.scale.setScalar(Math.max(0.55, camera.position.distanceTo(c.nucleus.position) * LABEL_SCALE * 0.6));
-
-    // Регистрируем в planetObjects для tooltip card динамика
     const obj = planetObjects.get(c.data.name);
     if (obj) {
       obj.state = state;
       obj.worldPosition.copy(c.nucleus.position);
     }
+    // Visibility
+    c.nucleus.visible = cometsVisible;
+    c.label.visible = cometsVisible && labelsToggle.checked;
+    c.trail.line.visible = cometsVisible && trailsToggle.checked;
+    if (c.orbit) c.orbit.visible = cometsVisible && trailsToggle.checked;
+    if (!cometsVisible) {
+      c.tail.visible = false;
+      continue;
+    }
+    c.tail.visible = true;
 
     // ── Tail orientation: anti-solar + billboard вокруг этой оси ────────────
     const cometPos = state.position;
@@ -1950,53 +2071,68 @@ function updateScene(deltaSeconds) {
     c.tail.material.uniforms.intensity.value = intensity;
   }
 
+  // ── Spacecraft per-frame update ──────────────────────────────────────────
+  // Линейная экстраполяция (Voyagers/NH) или Kepler (PSP). До launchDate скрыты.
+  // Позиции вычисляются всегда — visibility отдельно.
+  const spacecraftVisible = beltsInSolar && spacecraftToggle.checked;
+  for (const c of spacecraftObjects) {
+    const pos = computeSpacecraftPosition(c.data, simDate);
+    const existsNow = pos !== null;
+    if (existsNow) {
+      c.position.copy(pos);
+      c.sprite.position.copy(pos);
+      c.label.position.copy(pos).add(new THREE.Vector3(0, 1.2, 0));
+      c.label.scale.setScalar(Math.max(0.55, camera.position.distanceTo(pos) * LABEL_SCALE * 0.6));
+      const obj = planetObjects.get(c.data.name);
+      if (obj) {
+        obj.worldPosition.copy(pos);
+        obj.state = { position: pos, radiusAu: pos.length() / AU_SCALE };
+      }
+    }
+    const visible = spacecraftVisible && existsNow;
+    c.sprite.visible = visible;
+    c.label.visible = visible && labelsToggle.checked;
+    c.trail.line.visible = visible && trailsToggle.checked;
+  }
+
   // ── Dwarf planets per-frame update ────────────────────────────────────────
-  // Тот же pipeline что у регулярных планет, но без N-body override и без axial
-  // spin (нет надёжных данных по периодам вращения для всех 6). Видимость
-  // целиком зависит от dwarfPlanetsToggle.
+  // ВАЖНО: позиции всегда обновляются, даже если меш невидим. Иначе при focus
+  // на dwarf planet (через dropdown или click) камера прыгает в (0,0,0)
+  // потому что меш так и сидит на init-позиции.
   const dwarfsVisible = dwarfPlanetsToggle.checked && currentMode === 'solar';
   for (const planet of dwarfPlanets) {
     const obj = planetObjects.get(planet.name);
     if (!obj) continue;
+    // Always compute Kepler state and update position — visibility separate.
+    const state = planetState(planet, simDate);
+    obj.state = state;
+    obj.mesh.position.copy(state.position);
+    obj.label.position.copy(state.position).add(new THREE.Vector3(0, planet.radius + 0.6, 0));
+    obj.label.scale.setScalar(Math.max(0.55, camera.position.distanceTo(obj.mesh.position) * LABEL_SCALE * 0.7));
+    obj.mesh.getWorldPosition(obj.worldPosition);
+
+    // Visibility
     obj.mesh.visible = dwarfsVisible;
     obj.label.visible = dwarfsVisible && labelsToggle.checked;
+    obj.trail.line.visible = dwarfsVisible && trailsToggle.checked;
     if (obj.orbit) {
       obj.orbit.visible = dwarfsVisible && trailsToggle.checked;
-      if (obj.orbit.visible) {
-        const state = planetState(planet, simDate);
-        obj.state = state;
-        obj.mesh.position.copy(state.position);
-        obj.label.position.copy(state.position).add(new THREE.Vector3(0, planet.radius + 0.6, 0));
-        obj.label.scale.setScalar(Math.max(0.55, camera.position.distanceTo(obj.mesh.position) * LABEL_SCALE * 0.7));
-        updateOrbitGradient(obj.orbit, state.position);
-      }
+      if (obj.orbit.visible) updateOrbitGradient(obj.orbit, state.position);
     }
-    // Even when orbit is hidden, body should still move (so we can see it).
-    if (dwarfsVisible && (!obj.orbit || !obj.orbit.visible)) {
-      const state = planetState(planet, simDate);
-      obj.state = state;
-      obj.mesh.position.copy(state.position);
-      obj.label.position.copy(state.position).add(new THREE.Vector3(0, planet.radius + 0.6, 0));
-      obj.label.scale.setScalar(Math.max(0.55, camera.position.distanceTo(obj.mesh.position) * LABEL_SCALE * 0.7));
-    }
-    obj.mesh.getWorldPosition(obj.worldPosition);
-    obj.trail.line.visible = dwarfsVisible && trailsToggle.checked;
 
-    // Луны карликовых (Charon, Dysnomia)
+    // Луны карликовых (Charon, Dysnomia) — позиции тоже всегда обновляем.
     if (obj.moonAnchor) {
+      obj.moonAnchor.position.copy(obj.mesh.position);
       obj.moonAnchor.visible = dwarfsVisible;
-      if (dwarfsVisible) {
-        obj.moonAnchor.position.copy(obj.mesh.position);
-        for (const moonObj of obj.moons) {
-          const angle = (simDays / moonObj.data.period) * Math.PI * 2 + moonObj.data.phase;
-          const r = moonObj.data.dist * planet.radius;
-          moonObj.mesh.position.set(r * Math.cos(angle), 0, r * Math.sin(angle));
-          moonObj.mesh.rotation.y = Math.PI - angle;
-          moonObj.mesh.getWorldPosition(moonObj.worldPosition);
-          moonObj.label.position.copy(moonObj.mesh.position).add(new THREE.Vector3(0, moonObj.data.radius + 0.18, 0));
-          moonObj.label.scale.setScalar(Math.max(0.4, camera.position.distanceTo(moonObj.worldPosition) * LABEL_SCALE * 0.45));
-          moonObj.label.visible = labelsToggle.checked;
-        }
+      for (const moonObj of obj.moons) {
+        const angle = (simDays / moonObj.data.period) * Math.PI * 2 + moonObj.data.phase;
+        const r = moonObj.data.dist * planet.radius;
+        moonObj.mesh.position.set(r * Math.cos(angle), 0, r * Math.sin(angle));
+        moonObj.mesh.rotation.y = Math.PI - angle;
+        moonObj.mesh.getWorldPosition(moonObj.worldPosition);
+        moonObj.label.position.copy(moonObj.mesh.position).add(new THREE.Vector3(0, moonObj.data.radius + 0.18, 0));
+        moonObj.label.scale.setScalar(Math.max(0.4, camera.position.distanceTo(moonObj.worldPosition) * LABEL_SCALE * 0.45));
+        moonObj.label.visible = dwarfsVisible && labelsToggle.checked;
       }
     }
   }
@@ -2097,7 +2233,9 @@ function onPointerDown(event) {
   const hits = raycaster.intersectObjects(selectable, false);
   if (hits.length) {
     const obj = hits[0].object;
-    setFocus(obj.userData.label, 'free');
+    // Снапим камеру близко к телу (auto-zoom через jumpToFocus) и переключаем
+    // focus dropdown. Раньше делался только setFocus — камера оставалась далеко.
+    jumpToFocus(obj.userData.label);
     // На touch — закрепляем карточку чтобы пользователь успел прочитать.
     // На desktop тоже закрепим — пока не кликнут в пустое место.
     showBodyCard(obj, event.clientX, event.clientY, true);
@@ -2261,6 +2399,12 @@ function applyMode(mode) {
     c.label.visible = cometsOn && labelsToggle.checked;
     c.trail.line.visible = cometsOn && trailsToggle.checked;
     if (c.orbit) c.orbit.visible = cometsOn && trailsToggle.checked;
+  }
+  const spacecraftOn = mode === 'solar' && spacecraftToggle.checked;
+  for (const c of spacecraftObjects) {
+    c.sprite.visible = spacecraftOn;
+    c.label.visible = spacecraftOn && labelsToggle.checked;
+    c.trail.line.visible = spacecraftOn && trailsToggle.checked;
   }
 
   // Dwarf planets — видны только в solar mode + если toggle включён.

@@ -290,6 +290,83 @@ export const comets = [
   }
 ];
 
+// Notable spacecraft. Two motion types:
+//   • 'linear' — постоянная скорость от позиции в J2000 (Voyagers, NH —
+//     гиперболические escape trajectories, аппроксимируем прямой линией с
+//     момента J2000; погрешность ~1% от текущей дистанции за 26 лет).
+//   • 'kepler' — солнечная орбита с эксцентриситетом (PSP).
+//
+// launchDate — до этой даты тело скрыто (моделирование начинается с момента
+// запуска). После — позиция вычисляется как описано выше.
+//
+// Velocity и position J2000 у Voyagers/NH рассчитаны из реальных JPL Horizons
+// state vectors (rounded). У PSP орбита соответствует пост-2024 параметрам
+// (после финального Venus-flyby; до этого мисси использовала более широкие
+// орбиты для постепенного снижения афелия).
+export const spacecraft = [
+  {
+    name: 'Voyager 1',
+    launchDate: '1977-09-05',
+    color: 0x70d6ff,
+    radius: 0.04,
+    motion: {
+      type: 'linear',
+      // Position at J2000 в сценических AU coords (heading: RA 17h, Dec +12°,
+      // конвертировано в J2000 ecliptic frame и адаптировано под scene convention)
+      posAtJ2000: [-15.0, 43.6, -60.4],
+      velocity: [-0.71, 2.06, -2.85] // AU/year — 16.99 km/s в этом направлении
+    }
+  },
+  {
+    name: 'Voyager 2',
+    launchDate: '1977-08-20',
+    color: 0x93c5fd,
+    radius: 0.04,
+    motion: {
+      type: 'linear',
+      // Heading: RA 19h 53m, Dec -57° (южное направление, через Volans)
+      posAtJ2000: [22.1, -45.9, -31.6],
+      velocity: [1.21, -2.50, -1.72] // 15.41 km/s
+    }
+  },
+  {
+    name: 'New Horizons',
+    launchDate: '2006-01-19',
+    color: 0x86efac,
+    radius: 0.035,
+    motion: {
+      type: 'linear',
+      // Heading: in direction of constellation Sagittarius после Pluto flyby (2015)
+      // Так как launched в 2006, до этого скрыта — position at J2000 это
+      // обратная экстраполяция, не реальная позиция (NH ещё не существовала).
+      posAtJ2000: [-7.7, -0.6, 15.2],
+      velocity: [1.38, 0.11, -2.71] // 14.40 km/s
+    }
+  },
+  {
+    name: 'Parker Solar Probe',
+    launchDate: '2018-08-12',
+    color: 0xfde047,
+    radius: 0.03,
+    motion: {
+      // Кеплеровская орбита (post-final-Venus-flyby 2024 параметры):
+      //   a = 0.388 AU, e = 0.882, i = 3.4°. Period = 88 days.
+      //   Perihelion: 0.046 AU (~9.86 R_sun — рекорд приближения к Солнцу)
+      //   Aphelion: 0.74 AU
+      type: 'kepler',
+      a: [0.388, 0],
+      e: [0.882, 0],
+      i: [3.4, 0],
+      // L at J2000 — фиктивное значение чтобы орбита выглядела разумно. Реальная
+      // PSP не была в этой орбите в 2000 г. (миссия 2018+, орбита формировалась
+      // через 7 Venus-assists). Здесь используется как декоративный proxy.
+      L: [150, 149377],
+      longPeri: [130, 0],
+      longNode: [80, 0]
+    }
+  }
+];
+
 export function normalizeAngle(rad) {
   return ((rad % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
 }

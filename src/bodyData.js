@@ -429,6 +429,68 @@ export const BODY_DATA = {
     wiki: 'https://en.wikipedia.org/wiki/Dysnomia_(moon)'
   },
 
+  // ── Spacecraft ────────────────────────────────────────────────────────────
+
+  'Voyager 1': {
+    type: 'NASA interstellar probe',
+    mass: '722 kg dry',
+    radius: 'High-gain antenna 3.7 m',
+    distance: '165 AU from Sun (2026), in interstellar space',
+    orbitalPeriod: 'Hyperbolic escape — never returns',
+    composition: 'RTG-powered (Pu-238), instruments mostly off to conserve power',
+    facts: [
+      'Most distant human-made object ever',
+      'Crossed the heliopause (boundary of solar wind) in August 2012',
+      'Still transmitting at ~22 W → reaching Earth as ~10⁻¹⁸ W signal',
+      'Carrying the Golden Record — sounds and images of Earth, for any aliens'
+    ],
+    wiki: 'https://en.wikipedia.org/wiki/Voyager_1'
+  },
+
+  'Voyager 2': {
+    type: 'NASA interstellar probe',
+    mass: '722 kg dry',
+    radius: 'High-gain antenna 3.7 m',
+    distance: '138 AU from Sun (2026), in interstellar space',
+    orbitalPeriod: 'Hyperbolic escape — never returns',
+    facts: [
+      'Only spacecraft to visit all four giant planets (Jupiter, Saturn, Uranus, Neptune)',
+      'Crossed the heliopause in November 2018',
+      'Discovered new moons and rings around Uranus and Neptune',
+      'Heading south of the ecliptic plane (very different direction than V1)'
+    ],
+    wiki: 'https://en.wikipedia.org/wiki/Voyager_2'
+  },
+
+  'New Horizons': {
+    type: 'NASA Kuiper-belt probe',
+    mass: '478 kg launch mass',
+    distance: '62 AU from Sun (2026), beyond Pluto',
+    orbitalPeriod: 'Hyperbolic — escaping solar system',
+    facts: [
+      'Pluto flyby July 14, 2015 — first close-up images of the dwarf planet',
+      'Arrokoth flyby Jan 1, 2019 — most distant object ever visited (~44 AU)',
+      'Launched at 16.26 km/s — fastest at-launch speed of any spacecraft',
+      'Still operating — extended mission searches for more KBO targets'
+    ],
+    wiki: 'https://en.wikipedia.org/wiki/New_Horizons'
+  },
+
+  'Parker Solar Probe': {
+    type: 'NASA solar probe',
+    mass: '685 kg launch',
+    distance: 'Perihelion 0.046 AU (≈ 9.86 R_sun, closest ever)',
+    orbitalPeriod: '88 Earth days (final orbit, post-Dec 2024 perihelion)',
+    surfaceTemp: '+1 377 °C facing Sun at perihelion',
+    facts: [
+      'Closest human-made object to the Sun, ever',
+      'Reaches 191 km/s at perihelion — fastest human-made object',
+      'Used 7 Venus gravity assists to lower its aphelion progressively',
+      'Heat shield: 11.4 cm carbon composite, faces the Sun, keeps body at 30 °C'
+    ],
+    wiki: 'https://en.wikipedia.org/wiki/Parker_Solar_Probe'
+  },
+
   // ── Comets ────────────────────────────────────────────────────────────────
 
   Halley: {
