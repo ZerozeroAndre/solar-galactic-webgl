@@ -728,46 +728,12 @@ function addMilkyWayDisk() {
   thickDisk.frustumCulled = false;
   galaxyRoot.add(thickDisk);
 
-  // ── Слой 5: сферическое гало ─────────────────────────────────────────────
-  // Очень разреженные старые звёзды (Population II + globular clusters) в сфере
-  // радиуса 600 ед. (~27 kpc). Реалистичная пропорция к диску: 1:1.
-  const haloCount = 2000;
-  const haloPositions = new Float32Array(haloCount * 3);
-  const haloColors = new Float32Array(haloCount * 3);
-  const haloRadius = 600;
-  for (let i = 0; i < haloCount; i += 1) {
-    // Распределение r^0.5 — больше плотность ближе к центру, отдалённое гало разреже.
-    const u = Math.random();
-    const r = haloRadius * Math.pow(u, 0.6);
-    const theta = Math.random() * Math.PI * 2;
-    const phi = Math.acos(2 * Math.random() - 1);
-    haloPositions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
-    haloPositions[i * 3 + 1] = r * Math.cos(phi);
-    haloPositions[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
-    // Холодные старые красные карлики + жёлтые гиганты, в среднем теплее тонкого диска.
-    color.setHSL(0.08 + Math.random() * 0.05, 0.35, 0.5);
-    haloColors[i * 3] = color.r;
-    haloColors[i * 3 + 1] = color.g;
-    haloColors[i * 3 + 2] = color.b;
-  }
-  const haloGeom = new THREE.BufferGeometry();
-  haloGeom.setAttribute('position', new THREE.BufferAttribute(haloPositions, 3));
-  haloGeom.setAttribute('color', new THREE.BufferAttribute(haloColors, 3));
-  const halo = new THREE.Points(haloGeom, new THREE.PointsMaterial({
-    size: 0.9,
-    vertexColors: true,
-    transparent: true,
-    opacity: 0.25,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false,
-    sizeAttenuation: false,
-    fog: false
-  }));
-  halo.position.set(0, 0, -GALACTIC_RADIUS_SCENE);
-  halo.name = 'Milky Way halo';
-  halo.renderOrder = 6;
-  halo.frustumCulled = false;
-  galaxyRoot.add(halo);
+  // Halo (сферическая оболочка из 2000 звёзд вокруг центра МП) удалён.
+  // Хотя физически halo существует (Population II + globular clusters),
+  // визуально создаёт впечатление "галактика в снежном шаре": пользователь
+  // видит чёткую границу сферы вокруг диска, что противоречит реальности —
+  // halo очень разреженный и в честной симуляции просто не виден глазу.
+  // Звёздный фон обеспечивает skybox (панорама stars_milky_way.jpg).
 }
 
 // --- Stars & constellations (Hipparcos + IAU 88) ---------------------------
@@ -1353,12 +1319,12 @@ function updateScene(deltaSeconds) {
     sunLocal.y = -0.02; // путь лежит на y=-0.02, выравниваем для корректного поиска
     updateOrbitGradient(galaxyPath, sunLocal);
   }
-  // Звёзды, созвездия и MW skybox — только в galactic view. В solar mode они
-  // не должны рендериться: при zoom out пользователь видит круг из звёзд /
-  // голубоватую полосу MW-skybox на чёрном фоне.
+  // Hipparcos каталог и линии созвездий — только в galactic mode (они привязаны
+  // к сфере 2120, в solar mode не имеют научного смысла как "вокруг солнечной
+  // системы"). Skybox же — это панорама ночного неба, нужна всегда как фон.
   starsGroup.visible = starsToggle.checked && inGalacticView;
   constellationsGroup.visible = constellationsToggle.checked && inGalacticView;
-  if (skyboxMesh) skyboxMesh.visible = inGalacticView;
+  if (skyboxMesh) skyboxMesh.visible = true;
   dateLabel.textContent = simDate.toISOString().slice(0, 10);
 
   const sunObject = planetObjects.get('Sun');
