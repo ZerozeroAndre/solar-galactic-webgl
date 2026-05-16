@@ -19,7 +19,9 @@ import {
   eclipticToEquatorial,
   equatorialToHorizontal,
   milkyWayDrift,
+  normalizeAngle,
   planetState,
+  solveKepler,
   planets,
   radecToSceneVec3,
   setGalacticOrbitPeriod,
@@ -87,7 +89,9 @@ const MOONS = {
     // value; реальный node прецессирует с периодом 18.6 года, здесь зафиксирован).
     {
       name: 'Moon', dist: 2.5, period: 27.32, radius: 0.075, color: 0xcfcfcf, phase: 0.5,
-      inclination: 5.145, node: 125
+      inclination: 5.145, node: 125, eccentricity: 0.0549
+      // e=0.0549 — реальная луна. Perigee ~363k km, apogee ~405k km (10% variance).
+      // Видно как переменное расстояние от Земли в 3D-сцене (но небольшое визуально).
     }
   ],
   Jupiter: [
@@ -278,9 +282,15 @@ function jumpToFocus(name, offsetOverride = null) {
   else if (focused.mesh.geometry?.parameters?.radius) radius = focused.mesh.geometry.parameters.radius;
 
   const isSun = name === 'Sun';
-  const offset = offsetOverride || (isSun
-    ? new THREE.Vector3(radius * 12, radius * 8, radius * 16)   // distance ~29, ~5% экрана
-    : new THREE.Vector3(radius * 2, radius * 1.5, radius * 3)); // distance ~3.8r, ~55% экрана
+  const isSpacecraft = focused.isSpacecraft;
+  let offset;
+  if (offsetOverride) offset = offsetOverride;
+  else if (isSun) offset = new THREE.Vector3(radius * 12, radius * 8, radius * 16);
+  else if (isSpacecraft) {
+    // Spacecraft — sprite scale (3,3,1) world units. Камера на 6 единиц даёт
+    // ~50% screen view с фиксированным billboard sprite.
+    offset = new THREE.Vector3(3, 2, 5);
+  } else offset = new THREE.Vector3(radius * 2, radius * 1.5, radius * 3);
   camera.position.copy(focused.worldPosition).add(offset);
   controls.target.copy(focused.worldPosition);
   setFocus(name, 'free');
@@ -305,6 +315,52 @@ function loadTex(path, srgb = true) {
   t.anisotropy = 8;
   return t;
 }
+
+// Apply optional texture to existing material with graceful fallback:
+// если файл есть → texture показывается, цвет нейтральный. Если файла нет
+// (404, network error) → material остаётся с solid color, никакого warning.
+function applyOptionalTexture(material, path) {
+  if (!path) return;
+  textureLoader.load(
+    assetUrl(path),
+    (tex) => {
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.anisotropy = 8;
+      material.map = tex;
+      material.color.setHex(0xffffff); // нейтральный — текстура показывается as-is
+      material.needsUpdate = true;
+    },
+    undefined,
+    () => { /* error — оставляем solid color */ }
+  );
+}
+
+// Optional textures для всех not-currently-textured bodies (dwarf planets, moons).
+// Loading логика — оптимистическая: пытаемся загрузить async, при 404 fallback
+// остаётся на solid color (тот что в material.color по умолчанию). Файлы должны
+// лежать в public/textures/. Рекомендуемые источники качественных JPG (2K equirect):
+//   • Solar System Scope (https://www.solarsystemscope.com/textures/) — CC BY 4.0
+//     pluto, ceres, makemake, haumea, eris, charon, io, europa, ganymede, callisto, titan
+//   • NASA Trek (https://trek.nasa.gov/) — официальные планетарные карты
+//   • USGS Astrogeology — Phobos, Deimos
+const DWARF_TEXTURES = {
+  Pluto: '/textures/pluto.jpg',
+  Charon: '/textures/charon.jpg',
+  Ceres: '/textures/ceres.jpg',
+  Haumea: '/textures/haumea.jpg',
+  Makemake: '/textures/makemake.jpg',
+  Eris: '/textures/eris.jpg'
+};
+const MOON_TEXTURES = {
+  Io: '/textures/io.jpg',
+  Europa: '/textures/europa.jpg',
+  Ganymede: '/textures/ganymede.jpg',
+  Callisto: '/textures/callisto.jpg',
+  Titan: '/textures/titan.jpg',
+  Phobos: '/textures/phobos.jpg',
+  Deimos: '/textures/deimos.jpg'
+  // Dysnomia: пока без текстуры (нет публичных high-res снимков)
+};
 
 const PLANET_TEXTURES = {
   Mercury: { map: '/textures/mercury.jpg', roughness: 0.95 },
@@ -945,7 +1001,14 @@ function createComet(cometData) {
   nucleus.name = cometData.name;
   nucleus.userData = { label: cometData.name, type: 'comet', comet: cometData };
   const tail = createCometTail(cometData.tailColor || 0x9ec5ff);
-  return { nucleus, tail, data: cometData, state: null };
+  // Декларируем optional поля upfront — иначе TS не знает что мы их добавим
+  // ниже в buildScene (label, trail, orbit). Заполняются позже.
+  return {
+    nucleus, tail, data: cometData, state: null,
+    label: /** @type {THREE.Sprite | null} */ (null),
+    trail: /** @type {any} */ (null),
+    orbit: /** @type {THREE.Group | null} */ (null)
+  };
 }
 
 // Spacecraft icon — рисуется в canvas один раз и используется как sprite texture.
@@ -988,10 +1051,17 @@ function createSpacecraft(craftData) {
     fog: false
   });
   const sprite = new THREE.Sprite(spriteMat);
-  sprite.scale.set(2, 2, 1); // scene units — visible on any zoom
+  sprite.scale.set(3, 3, 1); // scene units — visible at far distances too
   sprite.name = craftData.name;
+  // Voyagers at 165+ AU могут быть очень далеко от центра; disable culling гарантирует
+  // что они всегда рендерятся пока их добавили в scene.
+  sprite.frustumCulled = false;
   sprite.userData = { label: craftData.name, type: 'spacecraft', spacecraft: craftData };
-  return { sprite, data: craftData, state: null, position: new THREE.Vector3() };
+  return {
+    sprite, data: craftData, state: null, position: new THREE.Vector3(),
+    label: /** @type {THREE.Sprite | null} */ (null),
+    trail: /** @type {any} */ (null)
+  };
 }
 
 // Compute spacecraft position at given simDate.
@@ -1507,11 +1577,13 @@ function buildScene() {
       solarRoot.add(moonAnchor);
       for (const moon of moonData) {
         const moonGeom = new THREE.SphereGeometry(moon.radius, 32, 16);
-        // Только у Луны Земли есть реальная текстура — у остальных fallback на цвет.
-        const moonMatOpts = { roughness: 0.94, metalness: 0.0 };
-        if (moon.name === 'Moon') moonMatOpts.map = loadTex('/textures/moon.jpg', true);
-        else moonMatOpts.color = moon.color;
-        const moonMat = new THREE.MeshStandardMaterial(moonMatOpts);
+        const moonMat = new THREE.MeshStandardMaterial({
+          color: moon.color, roughness: 0.94, metalness: 0.0
+        });
+        // Earth's Moon — текстура всегда есть. Galilean + Titan + Phobos/Deimos —
+        // загружаются если файл присутствует, иначе color fallback.
+        if (moon.name === 'Moon') applyOptionalTexture(moonMat, '/textures/moon.jpg');
+        else if (MOON_TEXTURES[moon.name]) applyOptionalTexture(moonMat, MOON_TEXTURES[moon.name]);
         const moonMesh = new THREE.Mesh(moonGeom, moonMat);
         moonMesh.name = moon.name;
         moonMesh.userData = { label: moon.name, type: 'moon', moon, parent: planet.name };
@@ -1553,10 +1625,9 @@ function buildScene() {
   for (const planet of dwarfPlanets) {
     const geometry = new THREE.SphereGeometry(planet.radius, 32, 16);
     const material = new THREE.MeshStandardMaterial({
-      color: planet.color,
-      roughness: 0.92,
-      metalness: 0.0
+      color: planet.color, roughness: 0.92, metalness: 0.0
     });
+    applyOptionalTexture(material, DWARF_TEXTURES[planet.name]);
     const mesh = new THREE.Mesh(geometry, material);
     mesh.name = planet.name;
     mesh.userData = { label: planet.name, type: 'planet', planet };
@@ -1588,6 +1659,7 @@ function buildScene() {
         const moonMat = new THREE.MeshStandardMaterial({
           color: moon.color, roughness: 0.94, metalness: 0.0
         });
+        applyOptionalTexture(moonMat, DWARF_TEXTURES[moon.name] || MOON_TEXTURES[moon.name]);
         const moonMesh = new THREE.Mesh(moonGeom, moonMat);
         moonMesh.name = moon.name;
         moonMesh.userData = { label: moon.name, type: 'moon', moon, parent: planet.name };
@@ -1733,13 +1805,27 @@ const PHASE_NAMES = [
   ['Waning Crescent', '🌘']
 ];
 
-// Position of a moon in the ecliptic frame, with optional inclination/node.
-// For moons without these fields (Galilean, Phobos, etc.) defaults to flat orbit.
+// Position of a moon in the ecliptic frame.
+// Supports optional Kepler elements: eccentricity, inclination, node.
+// • eccentricity 0 → circular orbit (default, как было раньше — для Io, Europa, Phobos, …)
+// • eccentricity > 0 → ellipse через standard Kepler equation: M = E − e·sin(E)
+// • inclination → tilt orbit relative to parent's equator/ecliptic
+// • node → longitude of ascending node (rotation around Y axis)
 function moonOrbitPosition(moonData, simDaysVal, parentRadius) {
-  const angle = (simDaysVal / moonData.period) * Math.PI * 2 + moonData.phase;
-  const r = moonData.dist * parentRadius;
-  let x = r * Math.cos(angle);
-  let z = r * Math.sin(angle);
+  const meanAnomaly = (simDaysVal / moonData.period) * Math.PI * 2 + (moonData.phase || 0);
+  const e = moonData.eccentricity || 0;
+  const a = moonData.dist * parentRadius;
+  let x, z;
+  if (e === 0) {
+    x = a * Math.cos(meanAnomaly);
+    z = a * Math.sin(meanAnomaly);
+  } else {
+    // Solve Kepler's equation для эллиптической орбиты. Newton-Raphson сходится
+    // за 4-6 итераций для e < 0.3 (для Луны e=0.055 → 3 итерации).
+    const E = solveKepler(normalizeAngle(meanAnomaly), e);
+    x = a * (Math.cos(E) - e);
+    z = a * Math.sqrt(1 - e * e) * Math.sin(E);
+  }
   let y = 0;
   if (moonData.inclination) {
     const i = moonData.inclination * DEG;
@@ -2300,7 +2386,9 @@ function updateScene(deltaSeconds) {
   // ── Spacecraft per-frame update ──────────────────────────────────────────
   // Линейная экстраполяция (Voyagers/NH) или Kepler (PSP). До launchDate скрыты.
   // Позиции вычисляются всегда — visibility отдельно.
-  const spacecraftVisible = beltsInSolar && spacecraftToggle.checked;
+  // В отличие от dwarf planets/belts/comets — spacecraft видны в ОБОИХ модах:
+  // Voyagers интересно увидеть в galactic context (далеко за пределами Sun).
+  const spacecraftVisible = spacecraftToggle.checked;
   for (const c of spacecraftObjects) {
     const pos = computeSpacecraftPosition(c.data, simDate);
     const existsNow = pos !== null;
@@ -2640,7 +2728,8 @@ function applyMode(mode) {
     c.trail.line.visible = cometsOn && trailsToggle.checked;
     if (c.orbit) c.orbit.visible = cometsOn && trailsToggle.checked;
   }
-  const spacecraftOn = mode === 'solar' && spacecraftToggle.checked;
+  // Spacecraft видны в обоих режимах (не привязаны к Sun-centric scale).
+  const spacecraftOn = spacecraftToggle.checked;
   for (const c of spacecraftObjects) {
     c.sprite.visible = spacecraftOn;
     c.label.visible = spacecraftOn && labelsToggle.checked;
