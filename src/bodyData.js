@@ -429,6 +429,45 @@ export const BODY_DATA = {
     wiki: 'https://en.wikipedia.org/wiki/Dysnomia_(moon)'
   },
 
+  // ── Comets ────────────────────────────────────────────────────────────────
+
+  Halley: {
+    type: 'Short-period comet (Halley-type)',
+    mass: '2.2 × 10¹⁴ kg',
+    radius: '~5.5 km (peanut-shaped nucleus)',
+    density: '0.6 g/cm³ (porous, "dirty snowball")',
+    distance: '0.586 AU at perihelion · 35.08 AU at aphelion',
+    orbitalPeriod: '75.32 Earth years',
+    surfaceTemp: '−170 °C far from Sun, briefly above 100 °C at perihelion',
+    composition: 'H₂O, CO, CO₂ ices + dust + organics',
+    axialTilt: '162.26° → retrograde orbit (against the planets)',
+    facts: [
+      'Last perihelion 1986 — visible from Earth then; next 2061',
+      'First periodic comet recognised (Halley, 1705) — proof Newtonian gravity',
+      'Giotto spacecraft (1986) flew within 596 km of the nucleus',
+      'Orbits backwards relative to the planets'
+    ],
+    wiki: 'https://en.wikipedia.org/wiki/Halley%27s_Comet'
+  },
+
+  'Hale-Bopp': {
+    type: 'Long-period comet',
+    mass: 'Estimated 1.3 × 10¹⁶ kg (largest comet of 20th century)',
+    radius: '~30 km nucleus (unusually large)',
+    distance: '0.914 AU at perihelion · 370 AU at aphelion',
+    orbitalPeriod: '~2 533 Earth years (after 1997 perihelion)',
+    surfaceTemp: '−260 °C far from Sun',
+    composition: 'H₂O, CO, dust — exceptionally dust-rich tail',
+    axialTilt: '89.4° → polar (nearly perpendicular to ecliptic)',
+    facts: [
+      'Visible to the naked eye for a record 18 months (1996-1997)',
+      'Brightest comet of the 20th century',
+      'Nucleus is unusually large — most comets are 1-10 km, Hale-Bopp ~30 km',
+      'Next perihelion approximately year 4500 AD'
+    ],
+    wiki: 'https://en.wikipedia.org/wiki/Comet_Hale%E2%80%93Bopp'
+  },
+
   Sedna: {
     type: 'Dwarf planet candidate (extreme TNO)',
     mass: '~10²¹ kg  (estimated, very uncertain)',

@@ -11,6 +11,7 @@ import {
   J2000,
   MS_PER_DAY,
   applyEclipticTilt,
+  comets,
   dwarfPlanets,
   eclipticFromCartesian,
   eclipticToEquatorial,
@@ -44,6 +45,7 @@ const dwarfPlanetsToggle = document.querySelector('#dwarfPlanetsToggle');
 const asteroidBeltToggle = document.querySelector('#asteroidBeltToggle');
 const kuiperBeltToggle = document.querySelector('#kuiperBeltToggle');
 const trojansToggle = document.querySelector('#trojansToggle');
+const cometsToggle = document.querySelector('#cometsToggle');
 const nbodyTmpVec = new THREE.Vector3();
 const labelsToggle = document.querySelector('#labelsToggle');
 const planetList = document.querySelector('#planetList');
@@ -835,6 +837,71 @@ function createJupiterTrojans() {
   return anchor;
 }
 
+// Comet tail — billboard plane vertices от 0 (nucleus) до 1 (хвост далеко).
+// Width 2, length 1 — масштабируется per-frame по intensity (1/r²).
+// Ориентация per-frame: Y-ось вдоль anti-solar direction, плоскость поворачивается
+// вокруг этой оси чтобы лицом к камере (cylindrical billboard).
+const COMET_TAIL_MAX_LENGTH = 18; // scene units = ~1.6 AU
+function createCometTail(tailColor) {
+  const geom = new THREE.PlaneGeometry(1.4, COMET_TAIL_MAX_LENGTH, 1, 1);
+  geom.translate(0, COMET_TAIL_MAX_LENGTH / 2, 0); // origin at one end (head)
+  const material = new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    fog: false,
+    blending: THREE.AdditiveBlending,
+    uniforms: {
+      tailColor: { value: new THREE.Color(tailColor) },
+      intensity: { value: 0.0 }
+    },
+    vertexShader: `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform vec3 tailColor;
+      uniform float intensity;
+      varying vec2 vUv;
+      void main() {
+        // vUv.y: 0 = nucleus end (bright), 1 = far end (transparent)
+        float lengthFade = pow(1.0 - vUv.y, 1.6);
+        // vUv.x: 0..1 across width, alpha gauss-like falloff at edges
+        float widthFade = pow(1.0 - abs(vUv.x - 0.5) * 2.0, 1.4);
+        float a = lengthFade * widthFade * intensity;
+        // Тёплая голова, холодный хвост — лёгкая color-shift по длине
+        vec3 c = mix(vec3(1.0, 0.95, 0.85), tailColor, vUv.y);
+        gl_FragColor = vec4(c, a);
+      }
+    `
+  });
+  const mesh = new THREE.Mesh(geom, material);
+  mesh.frustumCulled = false;
+  mesh.renderOrder = 5;
+  return mesh;
+}
+
+// Каждая комета — { nucleus, tail, state, data }. Nucleus и tail — direct
+// children of solarRoot. Tail имеет independent matrix update (anti-solar).
+function createComet(cometData) {
+  const nucleusGeom = new THREE.SphereGeometry(cometData.radius, 16, 8);
+  const nucleusMat = new THREE.MeshStandardMaterial({
+    color: cometData.color,
+    emissive: cometData.tailColor || 0xccccdd,
+    emissiveIntensity: 0.4,
+    roughness: 1,
+    metalness: 0
+  });
+  const nucleus = new THREE.Mesh(nucleusGeom, nucleusMat);
+  nucleus.name = cometData.name;
+  nucleus.userData = { label: cometData.name, type: 'comet', comet: cometData };
+  const tail = createCometTail(cometData.tailColor || 0x9ec5ff);
+  return { nucleus, tail, data: cometData, state: null };
+}
+
 function addMilkyWayDisk() {
   // ── Слой 1 (плоская ESO-текстура) — УДАЛЁН ─────────────────────────────
   // Плоский PlaneGeometry со sticker-видом галактики не имел физического смысла
@@ -1154,6 +1221,7 @@ function addGalaxyPath() {
 let asteroidBeltMesh = null;
 let kuiperBeltMesh = null;
 let trojansAnchor = null;
+const cometObjects = []; // [{ nucleus, tail, data, state, orbit?, label, trail }]
 
 function buildScene() {
   addSkybox();
@@ -1173,6 +1241,41 @@ function buildScene() {
   trojansAnchor = createJupiterTrojans();
   trojansAnchor.visible = false;
   solarRoot.add(trojansAnchor);
+
+  // Comets — nucleus + tail + label + trail + (опционально) orbit line.
+  for (const cometData of comets) {
+    const c = createComet(cometData);
+    solarRoot.add(c.nucleus);
+    solarRoot.add(c.tail);
+    selectable.push(c.nucleus);
+    c.label = makeLabel(cometData.name, '#bbf7d0');
+    c.label.scale.set(5, 1.3, 1);
+    solarRoot.add(c.label);
+    c.trail = makeTrail(cometData.tailColor || 0x9ec5ff);
+    trailRoot.add(c.trail.line);
+    if (!cometData.extremeOrbit) {
+      c.orbit = makeOrbitLine(cometData);
+      solarRoot.add(c.orbit);
+    }
+    c.nucleus.visible = false;
+    c.tail.visible = false;
+    c.label.visible = false;
+    c.trail.line.visible = false;
+    if (c.orbit) c.orbit.visible = false;
+    cometObjects.push(c);
+    // Регистрируем в planetObjects чтобы focus dropdown и tooltip card работали.
+    planetObjects.set(cometData.name, {
+      mesh: c.nucleus,
+      orbit: c.orbit || null,
+      label: c.label,
+      trail: c.trail,
+      moonAnchor: null,
+      moons: [],
+      state: null,
+      worldPosition: new THREE.Vector3(),
+      isComet: true
+    });
+  }
 
   const sunGeometry = new THREE.SphereGeometry(1.35, 64, 32);
   // Солнце светится самостоятельно — MeshBasicMaterial с текстурой.
@@ -1389,6 +1492,8 @@ function buildUi() {
     const moonsForPlanet = MOONS[p.name] || [];
     for (const m of moonsForPlanet) focusOptions.push(`  ↳ ${m.name}`);
   }
+  // Comets — также в dropdown
+  for (const c of comets) focusOptions.push(c.name);
   focusSelect.innerHTML = focusOptions
     .map((label) => {
       const value = label.startsWith('  ↳ ') ? label.slice(4) : label;
@@ -1568,6 +1673,13 @@ function appendLiveTrailSamples(fromDate, toDate, referenceFrame) {
       for (const planet of dwarfPlanets) {
         const obj = planetObjects.get(planet.name);
         if (obj) pushTrailSample(obj.trail, planetTrailPoint(planet, sampleDate, referenceFrame), sampleTime);
+      }
+    }
+    // Comets — те же сэмплы только если toggle включён.
+    if (cometsToggle.checked) {
+      for (const cometData of comets) {
+        const obj = planetObjects.get(cometData.name);
+        if (obj) pushTrailSample(obj.trail, planetTrailPoint(cometData, sampleDate, referenceFrame), sampleTime);
       }
     }
   }
@@ -1775,6 +1887,67 @@ function updateScene(deltaSeconds) {
         trojansAnchor.rotation.y = -jupiterAngle;
       }
     }
+  }
+
+  // ── Comets per-frame update ──────────────────────────────────────────────
+  // Nucleus position по Kepler; tail orientated anti-solar и billboard'ится
+  // вокруг этой оси чтобы лицом к камере. Длина и яркость ∝ 1/r².
+  const cometsVisible = beltsInSolar && cometsToggle.checked;
+  for (const c of cometObjects) {
+    c.nucleus.visible = cometsVisible;
+    c.tail.visible = cometsVisible;
+    c.label.visible = cometsVisible && labelsToggle.checked;
+    c.trail.line.visible = cometsVisible && trailsToggle.checked;
+    if (c.orbit) c.orbit.visible = cometsVisible && trailsToggle.checked;
+    if (!cometsVisible) continue;
+
+    const state = planetState(c.data, simDate);
+    c.state = state;
+    c.nucleus.position.copy(state.position);
+    c.nucleus.getWorldPosition(c.nucleus.userData.worldPosition = c.nucleus.userData.worldPosition || new THREE.Vector3());
+    c.label.position.copy(state.position).add(new THREE.Vector3(0, c.data.radius + 0.5, 0));
+    c.label.scale.setScalar(Math.max(0.55, camera.position.distanceTo(c.nucleus.position) * LABEL_SCALE * 0.6));
+
+    // Регистрируем в planetObjects для tooltip card динамика
+    const obj = planetObjects.get(c.data.name);
+    if (obj) {
+      obj.state = state;
+      obj.worldPosition.copy(c.nucleus.position);
+    }
+
+    // ── Tail orientation: anti-solar + billboard вокруг этой оси ────────────
+    const cometPos = state.position;
+    const r = cometPos.length() / AU_SCALE; // distance from Sun in AU
+    // Скрываем хвост когда комета слишком далеко (нет солнечного нагрева)
+    if (r > 5) {
+      c.tail.visible = false;
+      continue;
+    }
+    // Anti-solar direction (от Солнца через комету наружу)
+    const antiSun = cometPos.clone().normalize();
+    // Camera в solarRoot local frame
+    const camLocal = camera.position.clone();
+    solarRoot.worldToLocal(camLocal);
+    let view = camLocal.sub(cometPos);
+    if (view.lengthSq() < 1e-6) view.set(0, 0, 1);
+    else view.normalize();
+    let widthAxis = new THREE.Vector3().crossVectors(antiSun, view);
+    if (widthAxis.lengthSq() < 1e-6) {
+      // Camera looking exactly along anti-solar — pick arbitrary perpendicular
+      widthAxis = Math.abs(antiSun.y) < 0.9 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0);
+      widthAxis.cross(antiSun);
+    }
+    widthAxis.normalize();
+    const zAxis = new THREE.Vector3().crossVectors(widthAxis, antiSun);
+    // Compose quaternion from basis: X=width, Y=antiSun, Z=zAxis
+    const m = new THREE.Matrix4().makeBasis(widthAxis, antiSun, zAxis);
+    c.tail.quaternion.setFromRotationMatrix(m);
+    c.tail.position.copy(cometPos);
+    // Intensity и длина ∝ 1/r²; clamp на [0, 1].
+    const intensity = Math.min(1, 0.8 / (r * r));
+    const lengthScale = Math.max(0.15, intensity * 1.4);
+    c.tail.scale.set(1, lengthScale, 1);
+    c.tail.material.uniforms.intensity.value = intensity;
   }
 
   // ── Dwarf planets per-frame update ────────────────────────────────────────
@@ -2077,10 +2250,18 @@ function applyMode(mode) {
     }
     if (obj.moonAnchor) obj.moonAnchor.visible = cfg.showPlanets;
   }
-  // Asteroid + Kuiper belts + Trojans — только в solar mode.
+  // Asteroid + Kuiper belts + Trojans + Comets — только в solar mode.
   if (asteroidBeltMesh) asteroidBeltMesh.visible = mode === 'solar' && asteroidBeltToggle.checked;
   if (kuiperBeltMesh) kuiperBeltMesh.visible = mode === 'solar' && kuiperBeltToggle.checked;
   if (trojansAnchor) trojansAnchor.visible = mode === 'solar' && trojansToggle.checked;
+  const cometsOn = mode === 'solar' && cometsToggle.checked;
+  for (const c of cometObjects) {
+    c.nucleus.visible = cometsOn;
+    c.tail.visible = cometsOn;
+    c.label.visible = cometsOn && labelsToggle.checked;
+    c.trail.line.visible = cometsOn && trailsToggle.checked;
+    if (c.orbit) c.orbit.visible = cometsOn && trailsToggle.checked;
+  }
 
   // Dwarf planets — видны только в solar mode + если toggle включён.
   const dwarfsOn = cfg.showPlanets && dwarfPlanetsToggle.checked && mode === 'solar';

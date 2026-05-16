@@ -245,6 +245,51 @@ export const dwarfPlanets = [
   }
 ];
 
+// Comets with notable highly eccentric orbits. Same Keplerian model.
+// Halley orbit retrograde (i > 90°) — Kepler solver handles it correctly.
+// Hale-Bopp has Q ≈ 370 AU → extremeOrbit flag (нет статичной орбитной линии).
+//
+// Mean longitude rate per century derived from period:
+//   Halley: 360°/75.32 × 100 = 477.96°/cy
+//   Hale-Bopp: 360°/2533 × 100 = 14.21°/cy
+//
+// Mean longitude at J2000:
+//   Halley:    L = M + ϖ. Last perihelion 1986-Feb-09 (~14 yr before J2000).
+//              M ≈ (14/75.32) × 360 = 66.91°. ϖ = ω + Ω = 111.33 + 58.42 = 169.75°.
+//              L₀ ≈ 236.66°
+//   Hale-Bopp: Last perihelion 1997-Apr-01 (~2.75 yr before J2000).
+//              M ≈ (2.75/2533) × 360 = 0.39°. ϖ = 130.59 + 282.47 = 413.06 → 53.06°.
+//              L₀ ≈ 53.45°
+export const comets = [
+  {
+    name: 'Halley',
+    color: 0xdcdce6,
+    radius: 0.06,
+    actualRadiusKm: 11,
+    a: [17.834, 0],
+    e: [0.967142, 0],
+    i: [162.262, 0], // retrograde!
+    L: [236.66, 477.96],
+    longPeri: [169.75, 0],
+    longNode: [58.42, 0],
+    tailColor: 0x9ec5ff
+  },
+  {
+    name: 'Hale-Bopp',
+    color: 0xeef0f5,
+    radius: 0.07,
+    actualRadiusKm: 30,
+    a: [184, 0],
+    e: [0.9951, 0],
+    i: [89.43, 0], // polar — orbit перпендикулярна эклиптике
+    L: [53.45, 14.21],
+    longPeri: [53.06, 0],
+    longNode: [282.47, 0],
+    tailColor: 0xcceeff,
+    extremeOrbit: true // Q = 370 AU, орбитная линия не рисуется
+  }
+];
+
 export function normalizeAngle(rad) {
   return ((rad % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
 }
