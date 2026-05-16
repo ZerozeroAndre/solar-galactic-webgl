@@ -151,6 +151,23 @@ controls.touches = {
   ONE: THREE.TOUCH.ROTATE,
   TWO: THREE.TOUCH.DOLLY_PAN
 };
+// Авто-пауза при interaction с камерой, когда сфокусирован на теле. Иначе
+// быстро движущаяся Луна (период 27d → ~27s real time) "соскальзывает" из
+// центра экрана пока юзер пытается её повертеть. Pause только во время drag/zoom,
+// и только если режим — focus (не Free), и только если sim ещё не paused юзером.
+let pausedByInteraction = false;
+controls.addEventListener('start', () => {
+  if (focusName !== 'Free' && !paused) {
+    pausedByInteraction = true;
+    paused = true;
+  }
+});
+controls.addEventListener('end', () => {
+  if (pausedByInteraction) {
+    paused = false;
+    pausedByInteraction = false;
+  }
+});
 
 const raycaster = new THREE.Raycaster();
 // Линии созвездий — тонкие (1 vertex wide), default threshold 1 — попасть невозможно.
