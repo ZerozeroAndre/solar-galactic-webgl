@@ -57,6 +57,23 @@ Great Attractor (Hydra-Centaurus) in the CMB rest frame, leaving its own trail.*
 - Adjustable simulation speed (1 day/sec up to 100 years/sec), real-time mode
 - Toggle: trails, labels, Milky Way overlay, stars, constellation lines
 
+## Scientific accuracy
+
+Planet positions use **NASA's approximate Keplerian elements** with full 6
+orbital elements and secular rates per century — sub-arcminute accuracy for
+1800–2050. Eccentricities, inclinations and orbital periods are all real
+values. The Sun's galactic orbit uses a real 8 kpc radius and a 60.19° tilt
+between ecliptic and galactic planes. Tonight's sky panel uses standard
+astronomical transforms (GMST, ecliptic↔equatorial↔horizontal) and is accurate
+to ~0.5° for civil stargazing.
+
+Planet sizes and moon distances are **deliberately enlarged** for visibility —
+a literal-scale Earth would be smaller than a pixel.
+
+See [`docs/accuracy.md`](docs/accuracy.md) for a full assessment, the list of
+deliberate visual compromises, and what's missing for a stricter
+implementation (N-body perturbations, VSOP87, dwarf planets, librations, etc.).
+
 ## Stack
 
 - **Three.js** (r181) — WebGL rendering, scene graph, materials
