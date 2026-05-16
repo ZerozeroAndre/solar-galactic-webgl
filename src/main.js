@@ -287,9 +287,16 @@ function jumpToFocus(name, offsetOverride = null) {
   if (offsetOverride) offset = offsetOverride;
   else if (isSun) offset = new THREE.Vector3(radius * 12, radius * 8, radius * 16);
   else if (isSpacecraft) {
-    // Spacecraft — sprite scale (3,3,1) world units. Камера на 6 единиц даёт
-    // ~50% screen view с фиксированным billboard sprite.
-    offset = new THREE.Vector3(3, 2, 5);
+    // "Pale Blue Dot" perspective: камера дальше от Солнца чем spacecraft, в
+    // том же направлении. Смотрит на spacecraft → за ним вдалеке Солнечная
+    // система как яркая точка. Знаменитый ракурс V1 (1990).
+    const wpos = focused.worldPosition;
+    const distFromSun = wpos.length();
+    if (distFromSun > 1) {
+      offset = wpos.clone().normalize().multiplyScalar(6);
+    } else {
+      offset = new THREE.Vector3(3, 2, 5);
+    }
   } else offset = new THREE.Vector3(radius * 2, radius * 1.5, radius * 3);
   camera.position.copy(focused.worldPosition).add(offset);
   controls.target.copy(focused.worldPosition);
@@ -3042,6 +3049,10 @@ function animate() {
   updateScene(delta);
   maybeUpdateSky(performance.now());
   controls.update();
+  // Skybox follows camera — стандартный приём для "infinite background".
+  // Иначе при focus на удалённый объект (Voyager на 165 AU) камера почти
+  // упирается в стенку skybox-сферы радиуса 2200 → текстура искажается.
+  if (skyboxMesh) skyboxMesh.position.copy(camera.position);
   renderer.render(scene, camera);
   requestAnimationFrame(animate);
 }
