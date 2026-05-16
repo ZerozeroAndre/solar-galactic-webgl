@@ -41,6 +41,8 @@ const galaxyToggle = document.querySelector('#galaxyToggle');
 const orbitPathToggle = document.querySelector('#orbitPathToggle');
 const nbodyToggle = document.querySelector('#nbodyToggle');
 const dwarfPlanetsToggle = document.querySelector('#dwarfPlanetsToggle');
+const asteroidBeltToggle = document.querySelector('#asteroidBeltToggle');
+const kuiperBeltToggle = document.querySelector('#kuiperBeltToggle');
 const nbodyTmpVec = new THREE.Vector3();
 const labelsToggle = document.querySelector('#labelsToggle');
 const planetList = document.querySelector('#planetList');
@@ -630,6 +632,144 @@ function addSkybox() {
 // Размер плоского диска: 6.2× GALACTIC_RADIUS_SCENE = 1116 ед. Sun у нас на 180
 // от центра (= 8 kpc), диск тянется до ~25 kpc → 180 × 25/8 ≈ 562 (радиус).
 
+// ─── Asteroid belt + Kuiper belt — visual populations ─────────────────────
+// Не индивидуальные Kepler-orbit'ы (50k × Kepler-solve/кадр — overkill для
+// декоративного облака), а статичные point clouds с очень медленной общей
+// ротацией вокруг Солнца. Каждый пояс — один THREE.Points с per-vertex size.
+// Подход тот же что у Celestia/Stellarium для процедурных популяций.
+
+// Kirkwood gaps — резонансы средней мощности с Юпитером, в которых астероиды
+// нестабильны (выметаются за ~10⁶ лет). Видны как тёмные кольца в распределении.
+const KIRKWOOD_GAPS = [
+  { a: 2.06, w: 0.04 }, // 4:1 резонанс
+  { a: 2.50, w: 0.05 }, // 3:1 — Hestia gap
+  { a: 2.82, w: 0.04 }, // 5:2
+  { a: 2.96, w: 0.03 }, // 7:3
+  { a: 3.27, w: 0.06 }  // 2:1 — Hecuba gap, самый широкий
+];
+
+function isInKirkwoodGap(a) {
+  for (const g of KIRKWOOD_GAPS) if (Math.abs(a - g.a) < g.w) return true;
+  return false;
+}
+
+function buildBeltShaderMaterial() {
+  // Per-vertex size shader: каждая точка имеет свой размер sprite.
+  // Аддитивный блендинг здесь НЕ используется — это твёрдые тела, не свет.
+  return new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    fog: false,
+    vertexShader: `
+      attribute vec3 color;
+      attribute float size;
+      varying vec3 vColor;
+      void main() {
+        vColor = color;
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        gl_Position = projectionMatrix * mv;
+        gl_PointSize = size;
+      }
+    `,
+    fragmentShader: `
+      varying vec3 vColor;
+      void main() {
+        // Круглый sprite вместо квадратного (gl_PointCoord — UV точки 0..1)
+        vec2 d = gl_PointCoord - vec2(0.5);
+        if (length(d) > 0.5) discard;
+        gl_FragColor = vec4(vColor, 0.85);
+      }
+    `
+  });
+}
+
+// Главный пояс астероидов: 15 k точек между Mars и Jupiter (2.1-3.5 AU) с
+// гауссовским пиком плотности у 2.7 AU и провалами Kirkwood. Толщина ±0.15 AU.
+function createAsteroidBelt() {
+  const N = 15000;
+  const positions = new Float32Array(N * 3);
+  const colors = new Float32Array(N * 3);
+  const sizes = new Float32Array(N);
+  const color = new THREE.Color();
+  let written = 0;
+  while (written < N) {
+    // Сумма трёх uniform ≈ гауссиан, центр 2.7 AU
+    const r = 2.7 + ((Math.random() + Math.random() + Math.random()) / 3 - 0.5) * 1.4;
+    if (r < 2.1 || r > 3.5 || isInKirkwoodGap(r)) continue;
+    const theta = Math.random() * Math.PI * 2;
+    // Гауссово приближение по вертикали (±0.15 AU = ±1.65 сцен. ед.)
+    const yAu = ((Math.random() + Math.random() + Math.random()) / 3 - 0.5) * 0.3;
+    positions[written * 3] = r * Math.cos(theta) * AU_SCALE;
+    positions[written * 3 + 1] = yAu * AU_SCALE;
+    positions[written * 3 + 2] = r * Math.sin(theta) * AU_SCALE;
+    // Цвет: brown-grey диапазон — типично для C/S/M-type астероидов
+    color.setHSL(0.07 + Math.random() * 0.05, 0.25 + Math.random() * 0.2, 0.32 + Math.random() * 0.22);
+    colors[written * 3] = color.r;
+    colors[written * 3 + 1] = color.g;
+    colors[written * 3 + 2] = color.b;
+    // Размер: большинство 1 px, редкие 1.5-2 px (как ярче-астероиды)
+    sizes[written] = 0.7 + Math.random() * (Math.random() < 0.05 ? 1.5 : 0.6);
+    written += 1;
+  }
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geom.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  geom.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+  const points = new THREE.Points(geom, buildBeltShaderMaterial());
+  points.name = 'Asteroid belt';
+  points.renderOrder = 2;
+  points.frustumCulled = false;
+  return points;
+}
+
+// Пояс Койпера: 25 k точек, две компоненты —
+//   • Classical (cold) belt: 39-48 AU, низкие e и i (5:2 резонанс с Neptune на 39.4)
+//   • Scattered disc: 50-100 AU, высокие i (до 30°)
+// Цвет: icy blue-white (CH₄/H₂O лёд).
+function createKuiperBelt() {
+  const N = 25000;
+  const positions = new Float32Array(N * 3);
+  const colors = new Float32Array(N * 3);
+  const sizes = new Float32Array(N);
+  const color = new THREE.Color();
+  let written = 0;
+  while (written < N) {
+    let r, inclMax;
+    if (Math.random() < 0.7) {
+      // Classical belt — плоский, узкий
+      r = 39 + Math.random() * 11; // 39-50 AU
+      inclMax = 0.07; // ±4°
+    } else {
+      // Scattered disc — широкий, наклонённый
+      r = 30 + Math.pow(Math.random(), 0.5) * 70; // 30-100 AU, biased к ближе
+      inclMax = 0.5; // до ±29°
+    }
+    const theta = Math.random() * Math.PI * 2;
+    const incl = (Math.random() - 0.5) * 2 * inclMax;
+    const sinIncl = Math.sin(incl);
+    const cosIncl = Math.cos(incl);
+    positions[written * 3] = r * Math.cos(theta) * AU_SCALE;
+    positions[written * 3 + 1] = r * sinIncl * AU_SCALE;
+    positions[written * 3 + 2] = r * Math.sin(theta) * cosIncl * AU_SCALE;
+    // Цвет: ice blue-white до light grey
+    color.setHSL(0.55 + Math.random() * 0.10, 0.18 + Math.random() * 0.15, 0.55 + Math.random() * 0.25);
+    colors[written * 3] = color.r;
+    colors[written * 3 + 1] = color.g;
+    colors[written * 3 + 2] = color.b;
+    sizes[written] = 0.6 + Math.random() * (Math.random() < 0.03 ? 1.8 : 0.5);
+    written += 1;
+  }
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geom.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  geom.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+  const points = new THREE.Points(geom, buildBeltShaderMaterial());
+  points.name = 'Kuiper belt';
+  points.renderOrder = 2;
+  points.frustumCulled = false;
+  return points;
+}
+
 function addMilkyWayDisk() {
   // ── Слой 1 (плоская ESO-текстура) — УДАЛЁН ─────────────────────────────
   // Плоский PlaneGeometry со sticker-видом галактики не имел физического смысла
@@ -946,11 +1086,24 @@ function addGalaxyPath() {
   // региона — жёлто-оранжевый сферический glow от старых звёзд.
 }
 
+let asteroidBeltMesh = null;
+let kuiperBeltMesh = null;
+
 function buildScene() {
   addSkybox();
   addMilkyWayDisk();
   addGalaxyPath();
   loadSkyCatalog(); // async — звёзды и созвездия появятся когда загрузятся
+
+  // Asteroid + Kuiper belts: добавляем в solarRoot чтобы они автоматически
+  // двигались вместе с Солнцем в galactic mode (Солнце дрейфует — пояса с ним).
+  // Видимость управляется per-frame в updateScene по toggles.
+  asteroidBeltMesh = createAsteroidBelt();
+  asteroidBeltMesh.visible = false;
+  solarRoot.add(asteroidBeltMesh);
+  kuiperBeltMesh = createKuiperBelt();
+  kuiperBeltMesh.visible = false;
+  solarRoot.add(kuiperBeltMesh);
 
   const sunGeometry = new THREE.SphereGeometry(1.35, 64, 32);
   // Солнце светится самостоятельно — MeshBasicMaterial с текстурой.
@@ -1518,6 +1671,27 @@ function updateScene(deltaSeconds) {
     if (distanceEl) distanceEl.textContent = `${state.radiusAu.toFixed(2)} AU`;
   }
 
+  // ── Asteroid & Kuiper belt visibility + slow rotation ────────────────────
+  // Видимы только в solar mode + если toggle включён. Ротация на средней угловой
+  // скорости пояса (астероиды ~4.6 года, Kuiper ~250 лет) — solid-body rotation
+  // нарушает закон Кеплера для отдельных астероидов, но для декоративного
+  // облака даёт правильное ощущение движения.
+  const beltsInSolar = currentMode === 'solar';
+  if (asteroidBeltMesh) {
+    asteroidBeltMesh.visible = beltsInSolar && asteroidBeltToggle.checked;
+    if (asteroidBeltMesh.visible) {
+      // Период 4.6 года → ω = 2π/(4.6·365.25) рад/день
+      asteroidBeltMesh.rotation.y = -simDays * (2 * Math.PI / (4.6 * 365.25));
+    }
+  }
+  if (kuiperBeltMesh) {
+    kuiperBeltMesh.visible = beltsInSolar && kuiperBeltToggle.checked;
+    if (kuiperBeltMesh.visible) {
+      // Средний период Kuiper ~250 лет → намного медленнее
+      kuiperBeltMesh.rotation.y = -simDays * (2 * Math.PI / (250 * 365.25));
+    }
+  }
+
   // ── Dwarf planets per-frame update ────────────────────────────────────────
   // Тот же pipeline что у регулярных планет, но без N-body override и без axial
   // spin (нет надёжных данных по периодам вращения для всех 6). Видимость
@@ -1818,6 +1992,10 @@ function applyMode(mode) {
     }
     if (obj.moonAnchor) obj.moonAnchor.visible = cfg.showPlanets;
   }
+  // Asteroid + Kuiper belts — только в solar mode.
+  if (asteroidBeltMesh) asteroidBeltMesh.visible = mode === 'solar' && asteroidBeltToggle.checked;
+  if (kuiperBeltMesh) kuiperBeltMesh.visible = mode === 'solar' && kuiperBeltToggle.checked;
+
   // Dwarf planets — видны только в solar mode + если toggle включён.
   const dwarfsOn = cfg.showPlanets && dwarfPlanetsToggle.checked && mode === 'solar';
   for (const planet of dwarfPlanets) {
