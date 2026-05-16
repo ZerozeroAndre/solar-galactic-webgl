@@ -1,6 +1,7 @@
 import './styles.css';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { formatBodyCard } from './bodyData.js';
 import {
   AU_SCALE,
   DEG,
@@ -1480,32 +1481,62 @@ function updateScene(deltaSeconds) {
   }
 }
 
+let tooltipPinned = false;
+let tooltipPinTimeout = null;
+
+function positionTooltip(x, y) {
+  // Position near cursor, but clamp to viewport with 12px margin.
+  const rect = tooltip.getBoundingClientRect();
+  const margin = 12;
+  let left = x + 14;
+  let top = y + 14;
+  if (left + rect.width + margin > window.innerWidth) left = x - rect.width - 14;
+  if (top + rect.height + margin > window.innerHeight) top = y - rect.height - 14;
+  if (left < margin) left = margin;
+  if (top < margin) top = margin;
+  tooltip.style.left = `${left}px`;
+  tooltip.style.top = `${top}px`;
+}
+
+function showBodyCard(object, x, y, pinned = false) {
+  const label = object.userData.label;
+  const dynState = (object.userData.type === 'planet')
+    ? planetObjects.get(label)?.state
+    : null;
+  tooltip.innerHTML = formatBodyCard(label, dynState);
+  tooltip.hidden = false;
+  tooltip.classList.toggle('pinned', pinned);
+  // Need to set position after innerHTML so getBoundingClientRect is accurate.
+  requestAnimationFrame(() => positionTooltip(x, y));
+  if (pinned) {
+    tooltipPinned = true;
+    if (tooltipPinTimeout) clearTimeout(tooltipPinTimeout);
+    tooltipPinTimeout = setTimeout(() => {
+      tooltipPinned = false;
+      tooltip.hidden = true;
+    }, 8000);
+  }
+}
+
+function hideBodyCard() {
+  if (tooltipPinned) return; // запиненную не трогаем — её скроет либо новый клик, либо таймаут
+  tooltip.hidden = true;
+}
+
 function onPointerMove(event) {
+  // На touch-устройствах pointermove приходит во время drag — игнорируем, чтобы
+  // карточка не мелькала. На touch info показываем по pointerdown.
+  if (event.pointerType === 'touch') return;
+
   pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
   pointer.y = -(event.clientY / window.innerHeight) * 2 + 1;
   raycaster.setFromCamera(pointer, camera);
   const hits = raycaster.intersectObjects(selectable, false);
   if (!hits.length) {
-    tooltip.hidden = true;
+    hideBodyCard();
     return;
   }
-
-  const object = hits[0].object;
-  const label = object.userData.label;
-  tooltip.hidden = false;
-  tooltip.style.left = `${event.clientX + 14}px`;
-  tooltip.style.top = `${event.clientY + 14}px`;
-  if (object.userData.type === 'planet') {
-    const state = planetObjects.get(label).state;
-    tooltip.textContent = `${label}: ${state.radiusAu.toFixed(2)} AU from Sun`;
-  } else if (object.userData.type === 'moon') {
-    const moon = object.userData.moon;
-    tooltip.textContent = `${label} (moon of ${object.userData.parent}): period ${moon.period.toFixed(2)} days`;
-  } else if (object.userData.type === 'galaxy') {
-    tooltip.textContent = `${label}: ~26,000 light-years from Sun (Sagittarius A*)`;
-  } else {
-    tooltip.textContent = 'Sun: moving around Milky Way center';
-  }
+  showBodyCard(hits[0].object, event.clientX, event.clientY, false);
 }
 
 function onPointerDown(event) {
@@ -1513,8 +1544,17 @@ function onPointerDown(event) {
   pointer.y = -(event.clientY / window.innerHeight) * 2 + 1;
   raycaster.setFromCamera(pointer, camera);
   const hits = raycaster.intersectObjects(selectable, false);
-    if (hits.length) {
-    setFocus(hits[0].object.userData.label, 'free');
+  if (hits.length) {
+    const obj = hits[0].object;
+    setFocus(obj.userData.label, 'free');
+    // На touch — закрепляем карточку чтобы пользователь успел прочитать.
+    // На desktop тоже закрепим — пока не кликнут в пустое место.
+    showBodyCard(obj, event.clientX, event.clientY, true);
+  } else {
+    // Клик в пустоту — сбрасываем закрепление.
+    tooltipPinned = false;
+    if (tooltipPinTimeout) clearTimeout(tooltipPinTimeout);
+    tooltip.hidden = true;
   }
 }
 
