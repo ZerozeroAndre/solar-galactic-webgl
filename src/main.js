@@ -14,8 +14,10 @@ import {
   applyEclipticTilt,
   comets,
   dwarfPlanets,
+  namedAsteroids,
   spacecraft,
   eclipticFromCartesian,
+  elementAt,
   eclipticToEquatorial,
   equatorialToHorizontal,
   milkyWayDrift,
@@ -31,6 +33,124 @@ import { CITIES } from './cities.js';
 
 const canvas = document.querySelector('#scene');
 const speedInput = document.querySelector('#timeScale');
+// Search overlay — Cmd/Ctrl + K opens, type to filter all bodies, Enter to focus.
+const searchOverlay = document.querySelector('#searchOverlay');
+const searchInput = document.querySelector('#searchInput');
+const searchResults = document.querySelector('#searchResults');
+let searchActiveIdx = 0;
+
+function getAllSearchableNames() {
+  // Собираем все имена из data sources. Группировка для read'ability.
+  const names = [];
+  names.push({ name: 'Sun', kind: 'Star' });
+  for (const p of planets) {
+    names.push({ name: p.name, kind: 'Planet' });
+    for (const m of (MOONS[p.name] || [])) names.push({ name: m.name, kind: `Moon of ${p.name}` });
+  }
+  for (const p of dwarfPlanets) {
+    names.push({ name: p.name, kind: 'Dwarf planet' });
+    for (const m of (MOONS[p.name] || [])) names.push({ name: m.name, kind: `Moon of ${p.name}` });
+  }
+  for (const p of namedAsteroids) names.push({ name: p.name, kind: 'Asteroid' });
+  for (const c of comets) names.push({ name: c.name, kind: 'Comet' });
+  for (const s of spacecraft) names.push({ name: s.name, kind: 'Spacecraft' });
+  return names;
+}
+const ALL_SEARCHABLE = getAllSearchableNames();
+
+function renderSearchResults(query) {
+  const q = query.trim().toLowerCase();
+  const matches = q
+    ? ALL_SEARCHABLE.filter((e) => e.name.toLowerCase().includes(q))
+    : ALL_SEARCHABLE.slice(0, 20);
+  searchActiveIdx = 0;
+  searchResults.innerHTML = matches.map((e, i) =>
+    `<div class="search-item${i === 0 ? ' active' : ''}" data-name="${e.name}">
+       ${e.name}
+       <span class="search-meta">${e.kind}</span>
+     </div>`
+  ).join('');
+  // Bind click on each
+  searchResults.querySelectorAll('.search-item').forEach((el, i) => {
+    el.addEventListener('click', () => {
+      searchActiveIdx = i;
+      pickSearchResult();
+    });
+  });
+}
+
+function pickSearchResult() {
+  const items = searchResults.querySelectorAll('.search-item');
+  const active = items[searchActiveIdx];
+  if (!active) return;
+  const name = active.dataset.name;
+  closeSearch();
+  jumpToFocus(name);
+  // Sync dropdown to match
+  if (focusSelect) focusSelect.value = name;
+}
+
+function openSearch() {
+  searchOverlay.hidden = false;
+  searchInput.value = '';
+  renderSearchResults('');
+  // Focus после reflow
+  requestAnimationFrame(() => searchInput.focus());
+}
+
+function closeSearch() {
+  searchOverlay.hidden = true;
+}
+
+searchInput.addEventListener('input', (e) => renderSearchResults(e.target.value));
+searchInput.addEventListener('keydown', (e) => {
+  const items = searchResults.querySelectorAll('.search-item');
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    if (items.length === 0) return;
+    items[searchActiveIdx]?.classList.remove('active');
+    searchActiveIdx = (searchActiveIdx + 1) % items.length;
+    items[searchActiveIdx].classList.add('active');
+    items[searchActiveIdx].scrollIntoView({ block: 'nearest' });
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (items.length === 0) return;
+    items[searchActiveIdx]?.classList.remove('active');
+    searchActiveIdx = (searchActiveIdx - 1 + items.length) % items.length;
+    items[searchActiveIdx].classList.add('active');
+    items[searchActiveIdx].scrollIntoView({ block: 'nearest' });
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    pickSearchResult();
+  } else if (e.key === 'Escape') {
+    closeSearch();
+  }
+});
+
+// Cmd+K / Ctrl+K — открыть search overlay
+window.addEventListener('keydown', (e) => {
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+    e.preventDefault();
+    openSearch();
+  }
+});
+
+// Click outside modal — закрыть
+searchOverlay.addEventListener('click', (e) => {
+  if (e.target === searchOverlay) closeSearch();
+});
+
+// Speed presets — кликабельные кнопки рядом со слайдером, быстрое переключение
+// между типичными темпами (1 day/sec, 1 month/sec, 1 year/sec, 10 years/sec).
+document.querySelectorAll('.speed-preset').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const targetSpeed = parseFloat(btn.dataset.speed);
+    // Clamp to current slider range (солнечный mode max=4, galactic max=10).
+    const clamped = Math.min(parseFloat(speedInput.max), Math.max(parseFloat(speedInput.min), targetSpeed));
+    speedInput.value = String(clamped);
+    speedInput.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+});
 const speedLabel = document.querySelector('#speedLabel');
 const dateLabel = document.querySelector('#dateLabel');
 const pauseBtn = document.querySelector('#pauseBtn');
@@ -51,6 +171,10 @@ const kuiperBeltToggle = document.querySelector('#kuiperBeltToggle');
 const trojansToggle = document.querySelector('#trojansToggle');
 const cometsToggle = document.querySelector('#cometsToggle');
 const spacecraftToggle = document.querySelector('#spacecraftToggle');
+const heliopauseToggle = document.querySelector('#heliopauseToggle');
+const lagrangeToggle = document.querySelector('#lagrangeToggle');
+const apsidesToggle = document.querySelector('#apsidesToggle');
+const namedAsteroidsToggle = document.querySelector('#namedAsteroidsToggle');
 const nbodyTmpVec = new THREE.Vector3();
 const labelsToggle = document.querySelector('#labelsToggle');
 const planetList = document.querySelector('#planetList');
@@ -265,17 +389,13 @@ function jumpToFocus(name, offsetOverride = null) {
   // Авто-включение соответствующего toggle если фокусимся на скрытом теле.
   // Иначе пользователь zoom'ится в правильную точку, но видит пустоту (тело hidden).
   const dwarfNames = ['Ceres', 'Pluto', 'Haumea', 'Makemake', 'Eris', 'Sedna', 'Charon', 'Dysnomia'];
+  const asteroidNames = ['Vesta', 'Pallas', 'Hygiea', 'Juno', 'Eunomia', 'Iris'];
   const cometNames = ['Halley', 'Hale-Bopp'];
   const spacecraftNames = ['Voyager 1', 'Voyager 2', 'New Horizons', 'Parker Solar Probe'];
-  if (dwarfNames.includes(name) && !dwarfPlanetsToggle.checked) {
-    dwarfPlanetsToggle.checked = true;
-  }
-  if (cometNames.includes(name) && !cometsToggle.checked) {
-    cometsToggle.checked = true;
-  }
-  if (spacecraftNames.includes(name) && !spacecraftToggle.checked) {
-    spacecraftToggle.checked = true;
-  }
+  if (dwarfNames.includes(name) && !dwarfPlanetsToggle.checked) dwarfPlanetsToggle.checked = true;
+  if (asteroidNames.includes(name) && !namedAsteroidsToggle.checked) namedAsteroidsToggle.checked = true;
+  if (cometNames.includes(name) && !cometsToggle.checked) cometsToggle.checked = true;
+  if (spacecraftNames.includes(name) && !spacecraftToggle.checked) spacecraftToggle.checked = true;
   focused.mesh.getWorldPosition(focused.worldPosition);
 
   // Автоматический zoom: расстояние камеры подбирается из размера тела.
@@ -1068,8 +1188,27 @@ function createSpacecraft(craftData) {
   // что они всегда рендерятся пока их добавили в scene.
   sprite.frustumCulled = false;
   sprite.userData = { label: craftData.name, type: 'spacecraft', spacecraft: craftData };
+
+  // Trajectory line — faint additive линия от Sun до текущей позиции spacecraft.
+  // Решает проблему "континуального пространства": визуально соединяет внутреннюю
+  // солнечную систему с далёким Voyager. Обновляется per-frame.
+  const trajGeom = new THREE.BufferGeometry();
+  const trajPositions = new Float32Array(6); // [x0,y0,z0, x1,y1,z1]
+  trajGeom.setAttribute('position', new THREE.BufferAttribute(trajPositions, 3));
+  const trajMat = new THREE.LineBasicMaterial({
+    color: craftData.color,
+    transparent: true,
+    opacity: 0.18,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    fog: false
+  });
+  const trajLine = new THREE.Line(trajGeom, trajMat);
+  trajLine.frustumCulled = false;
+  trajLine.renderOrder = 4;
+
   return {
-    sprite, data: craftData, state: null, position: new THREE.Vector3(),
+    sprite, trajLine, data: craftData, state: null, position: new THREE.Vector3(),
     label: /** @type {THREE.Sprite | null} */ (null),
     trail: /** @type {any} */ (null)
   };
@@ -1093,6 +1232,145 @@ function computeSpacecraftPosition(craftData, simDate) {
     return planetState(motion, simDate).position;
   }
   return null;
+}
+
+// Apsis position для planet: true anomaly ν=0 (perihelion) или ν=π (aphelion).
+// Не зависит от mean anomaly (т.е. от текущей даты), только от orbital elements.
+function apsisPosition(planet, trueAnomaly, simDate) {
+  const days = (simDate.getTime() - J2000) / MS_PER_DAY;
+  const centuries = days / 36525;
+  const a = elementAt(planet.a, centuries);
+  const e = elementAt(planet.e, centuries);
+  const i = elementAt(planet.i, centuries) * DEG;
+  const longPeri = elementAt(planet.longPeri, centuries) * DEG;
+  const longNode = elementAt(planet.longNode, centuries) * DEG;
+  const argPeri = longPeri - longNode;
+  const r = a * (1 - e * e) / (1 + e * Math.cos(trueAnomaly));
+  const u = trueAnomaly + argPeri;
+  const cosO = Math.cos(longNode), sinO = Math.sin(longNode);
+  const cosI = Math.cos(i), sinI = Math.sin(i);
+  const cosU = Math.cos(u), sinU = Math.sin(u);
+  const x = r * (cosO * cosU - sinO * sinU * cosI);
+  const z = r * (sinO * cosU + cosO * sinU * cosI);
+  const y = r * (sinU * sinI);
+  return new THREE.Vector3(x * AU_SCALE, y * AU_SCALE, z * AU_SCALE);
+}
+
+function createApsidesMarkers() {
+  const group = new THREE.Group();
+  group.name = 'Apsides';
+  for (const planet of planets) {
+    // Маленькие markers — sphere meshes. Perihelion красный (горячий, ближе к Sun),
+    // aphelion синий (холодный, дальше).
+    const peri = new THREE.Mesh(
+      new THREE.SphereGeometry(0.06, 12, 8),
+      new THREE.MeshBasicMaterial({ color: 0xfb923c, transparent: true, opacity: 0.85, depthWrite: false })
+    );
+    peri.userData = { type: 'apsis', kind: 'perihelion', planet: planet.name, label: `Perihelion-${planet.name}` };
+    peri.renderOrder = 5;
+    const apo = new THREE.Mesh(
+      new THREE.SphereGeometry(0.06, 12, 8),
+      new THREE.MeshBasicMaterial({ color: 0x60a5fa, transparent: true, opacity: 0.85, depthWrite: false })
+    );
+    apo.userData = { type: 'apsis', kind: 'aphelion', planet: planet.name, label: `Aphelion-${planet.name}` };
+    apo.renderOrder = 5;
+    group.add(peri);
+    group.add(apo);
+    apsidesMarkers.push({ peri, apo, planet });
+  }
+  return group;
+}
+
+// Lagrange points (Sun-Earth система) — 5 точек гравитационного равновесия.
+//   L1: между Sun и Earth (0.99 AU) — SOHO, DSCOVR
+//   L2: за Earth, по anti-Sun (1.01 AU) — JWST, Gaia, Euclid
+//   L3: на противоположной стороне Sun (−1 AU) — никто не размещён
+//   L4: 60° впереди Earth по орбите — Earth Trojans (2010 TK7)
+//   L5: 60° позади Earth — theoretical Trojans
+//
+// Маркеры — sprite с canvas-icon. Position обновляется per-frame по Earth's position.
+function makeLagrangeIcon(label, color) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 64; canvas.height = 64;
+  const ctx = canvas.getContext('2d');
+  const cssColor = `#${color.toString(16).padStart(6, '0')}`;
+  ctx.strokeStyle = cssColor;
+  ctx.fillStyle = cssColor;
+  ctx.lineWidth = 2.5;
+  // Diamond shape
+  ctx.beginPath();
+  ctx.moveTo(32, 8); ctx.lineTo(56, 32); ctx.lineTo(32, 56); ctx.lineTo(8, 32); ctx.closePath();
+  ctx.stroke();
+  // Label inside
+  ctx.font = 'bold 22px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(label, 32, 34);
+  return new THREE.CanvasTexture(canvas);
+}
+
+function createLagrangePoints() {
+  const group = new THREE.Group();
+  group.name = 'Sun-Earth Lagrange';
+  const colors = { L1: 0xfde047, L2: 0xa78bfa, L3: 0x94a3b8, L4: 0x86efac, L5: 0x86efac };
+  for (const ptName of ['L1', 'L2', 'L3', 'L4', 'L5']) {
+    const tex = makeLagrangeIcon(ptName, colors[ptName]);
+    const mat = new THREE.SpriteMaterial({
+      map: tex, color: 0xffffff, transparent: true,
+      depthWrite: false, fog: false
+    });
+    const sprite = new THREE.Sprite(mat);
+    sprite.scale.set(0.6, 0.6, 1);
+    sprite.frustumCulled = false;
+    sprite.userData = { type: 'lagrange', label: `Lagrange${ptName}` };
+    group.add(sprite);
+    lagrangeSprites.push({ sprite, name: ptName });
+  }
+  return group;
+}
+
+// Heliosphere boundary visualization — two semi-transparent spheres:
+//   • Termination shock at ~94 AU — где solar wind замедляется от supersonic
+//   • Heliopause at ~120 AU — фактическая граница Солнечной системы (solar wind
+//     встречает interstellar medium). Voyager 1 пересёк в 2012, Voyager 2 в 2018.
+// Render: BackSide + low opacity + additive. Видны как мягкие сферы.
+function createHeliosphere() {
+  const group = new THREE.Group();
+  group.name = 'Heliosphere boundaries';
+
+  // Termination shock — внутренняя сфера, голубоватая
+  const shockGeom = new THREE.SphereGeometry(94 * AU_SCALE, 64, 32);
+  const shockMat = new THREE.MeshBasicMaterial({
+    color: 0x60a5fa,
+    transparent: true,
+    opacity: 0.05,
+    side: THREE.BackSide,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    fog: false
+  });
+  const shock = new THREE.Mesh(shockGeom, shockMat);
+  shock.userData = { type: 'population', label: 'TerminationShock' };
+  shock.renderOrder = 1;
+  group.add(shock);
+
+  // Heliopause — внешняя сфера, фиолетовая (где гелиосфера встречает ISM)
+  const hpGeom = new THREE.SphereGeometry(120 * AU_SCALE, 64, 32);
+  const hpMat = new THREE.MeshBasicMaterial({
+    color: 0xa78bfa,
+    transparent: true,
+    opacity: 0.04,
+    side: THREE.BackSide,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    fog: false
+  });
+  const hp = new THREE.Mesh(hpGeom, hpMat);
+  hp.userData = { type: 'population', label: 'Heliopause' };
+  hp.renderOrder = 1;
+  group.add(hp);
+
+  return group;
 }
 
 function addMilkyWayDisk() {
@@ -1417,6 +1695,11 @@ function addGalaxyPath() {
 let asteroidBeltMesh = null;
 let kuiperBeltMesh = null;
 let trojansAnchor = null;
+let heliopauseGroup = null;
+let lagrangeGroup = null;
+const lagrangeSprites = []; // [{ sprite, label, name }]
+let apsidesGroup = null;
+const apsidesMarkers = []; // [{ peri: Mesh, apo: Mesh, planet }]
 const cometObjects = []; // [{ nucleus, tail, data, state, orbit?, label, trail }]
 const spacecraftObjects = []; // [{ sprite, data, position, label, trail }]
 
@@ -1439,6 +1722,27 @@ function buildScene() {
   kuiperBeltMesh.userData = { type: 'population', label: 'KuiperBelt' };
   solarRoot.add(kuiperBeltMesh);
   selectable.push(kuiperBeltMesh);
+  heliopauseGroup = createHeliosphere();
+  heliopauseGroup.visible = false;
+  solarRoot.add(heliopauseGroup);
+  // Помечаем child-meshes для hover
+  heliopauseGroup.traverse((obj) => {
+    if (obj.isMesh && obj.userData.label) selectable.push(obj);
+  });
+
+  lagrangeGroup = createLagrangePoints();
+  lagrangeGroup.visible = false;
+  solarRoot.add(lagrangeGroup);
+  for (const lp of lagrangeSprites) selectable.push(lp.sprite);
+
+  apsidesGroup = createApsidesMarkers();
+  apsidesGroup.visible = false;
+  solarRoot.add(apsidesGroup);
+  for (const m of apsidesMarkers) {
+    selectable.push(m.peri);
+    selectable.push(m.apo);
+  }
+
   trojansAnchor = createJupiterTrojans();
   trojansAnchor.visible = false;
   // anchor — Group, raycast целиком не работает. Помечаем child-points внутри.
@@ -1490,6 +1794,7 @@ function buildScene() {
   for (const craftData of spacecraft) {
     const c = createSpacecraft(craftData);
     solarRoot.add(c.sprite);
+    solarRoot.add(c.trajLine);
     selectable.push(c.sprite);
     c.label = makeLabel(craftData.name, '#e0e7ff');
     c.label.scale.set(4.5, 1.15, 1);
@@ -1644,7 +1949,7 @@ function buildScene() {
   // Same pipeline as planets (sphere + orbit + label + trail), but always
   // MeshStandardMaterial with solid color (no textures). Extreme orbits like
   // Sedna get no static orbit line — only the body and live trail are shown.
-  for (const planet of dwarfPlanets) {
+  for (const planet of [...dwarfPlanets, ...namedAsteroids]) {
     const geometry = new THREE.SphereGeometry(planet.radius, 32, 16);
     const material = new THREE.MeshStandardMaterial({
       color: planet.color, roughness: 0.92, metalness: 0.0
@@ -1730,6 +2035,8 @@ function buildUi() {
     const moonsForPlanet = MOONS[p.name] || [];
     for (const m of moonsForPlanet) focusOptions.push(`  ↳ ${m.name}`);
   }
+  // Named asteroids
+  for (const p of namedAsteroids) focusOptions.push(p.name);
   // Comets и spacecraft — также в dropdown
   for (const c of comets) focusOptions.push(c.name);
   for (const c of spacecraft) focusOptions.push(c.name);
@@ -2112,9 +2419,16 @@ function appendLiveTrailSamples(fromDate, toDate, referenceFrame) {
       const obj = planetObjects.get(planet.name);
       pushTrailSample(obj.trail, planetTrailPoint(planet, sampleDate, referenceFrame), sampleTime);
     }
-    // Dwarf planets — те же сэмплы trail только если их toggle включён.
+    // Dwarf planets — sample только если toggle включён.
     if (dwarfPlanetsToggle.checked) {
       for (const planet of dwarfPlanets) {
+        const obj = planetObjects.get(planet.name);
+        if (obj) pushTrailSample(obj.trail, planetTrailPoint(planet, sampleDate, referenceFrame), sampleTime);
+      }
+    }
+    // Named asteroids — отдельный toggle
+    if (namedAsteroidsToggle.checked) {
+      for (const planet of namedAsteroids) {
         const obj = planetObjects.get(planet.name);
         if (obj) pushTrailSample(obj.trail, planetTrailPoint(planet, sampleDate, referenceFrame), sampleTime);
       }
@@ -2327,6 +2641,44 @@ function updateScene(deltaSeconds) {
   // Jupiter Trojans — anchor вращается чтобы L4 кластер оказался на +60° впереди
   // Jupiter, L5 на 60° позади. Используем актуальную угловую позицию Jupiter
   // (с учётом эксцентриситета и инклинации) через состояние Кеплера.
+  if (heliopauseGroup) heliopauseGroup.visible = heliopauseToggle.checked;
+  // Apsides markers — обновляем позиции из orbital elements каждый кадр.
+  // Они слабо смещаются (precession), но не зависят от времени-в-орбите.
+  if (apsidesGroup) {
+    apsidesGroup.visible = apsidesToggle.checked && currentMode === 'solar';
+    if (apsidesGroup.visible) {
+      for (const m of apsidesMarkers) {
+        m.peri.position.copy(apsisPosition(m.planet, 0, simDate));
+        m.apo.position.copy(apsisPosition(m.planet, Math.PI, simDate));
+      }
+    }
+  }
+  // Lagrange points (Sun-Earth) — position обновляется per-frame по Earth's location.
+  if (lagrangeGroup) {
+    lagrangeGroup.visible = lagrangeToggle.checked;
+    if (lagrangeGroup.visible) {
+      const earthObj = planetObjects.get('Earth');
+      if (earthObj && earthObj.state) {
+        const ep = earthObj.state.position;
+        // L1: 0.99·earth (между Sun и Earth)
+        // L2: 1.01·earth (за Earth по anti-Sun)
+        // L3: −1·earth (другая сторона Sun)
+        // L4/L5: rotate Earth pos by ±60° в орбитальной плоскости
+        const c60 = 0.5, s60 = 0.8660254;
+        const positions = {
+          L1: [ep.x * 0.99, ep.y * 0.99, ep.z * 0.99],
+          L2: [ep.x * 1.01, ep.y * 1.01, ep.z * 1.01],
+          L3: [-ep.x, -ep.y, -ep.z],
+          L4: [ep.x * c60 - ep.z * s60, ep.y, ep.x * s60 + ep.z * c60],
+          L5: [ep.x * c60 + ep.z * s60, ep.y, -ep.x * s60 + ep.z * c60]
+        };
+        for (const lp of lagrangeSprites) {
+          const pos = positions[lp.name];
+          lp.sprite.position.set(pos[0], pos[1], pos[2]);
+        }
+      }
+    }
+  }
   if (trojansAnchor) {
     trojansAnchor.visible = trojansToggle.checked;
     if (trojansAnchor.visible) {
@@ -2427,17 +2779,26 @@ function updateScene(deltaSeconds) {
     c.sprite.visible = visible;
     c.label.visible = visible && labelsToggle.checked;
     c.trail.line.visible = visible && trailsToggle.checked;
+    // Trajectory line от Sun (0,0,0) до текущей позиции
+    c.trajLine.visible = visible;
+    if (visible && existsNow) {
+      const tp = c.trajLine.geometry.attributes.position.array;
+      tp[0] = 0; tp[1] = 0; tp[2] = 0;
+      tp[3] = pos.x; tp[4] = pos.y; tp[5] = pos.z;
+      c.trajLine.geometry.attributes.position.needsUpdate = true;
+    }
   }
 
-  // ── Dwarf planets per-frame update ────────────────────────────────────────
+  // ── Dwarf planets + named asteroids per-frame update ─────────────────────
   // ВАЖНО: позиции всегда обновляются, даже если меш невидим. Иначе при focus
-  // на dwarf planet (через dropdown или click) камера прыгает в (0,0,0)
-  // потому что меш так и сидит на init-позиции.
-  // Видны в обоих режимах (children solarRoot).
-  const dwarfsVisible = dwarfPlanetsToggle.checked;
-  for (const planet of dwarfPlanets) {
+  // на dwarf planet (через dropdown или click) камера прыгает в (0,0,0).
+  // Visibility — отдельные toggles: dwarf planets vs named asteroids.
+  const asteroidNamesSet = new Set(namedAsteroids.map((p) => p.name));
+  for (const planet of [...dwarfPlanets, ...namedAsteroids]) {
     const obj = planetObjects.get(planet.name);
     if (!obj) continue;
+    const isAsteroid = asteroidNamesSet.has(planet.name);
+    const dwarfsVisible = isAsteroid ? namedAsteroidsToggle.checked : dwarfPlanetsToggle.checked;
     // Always compute Kepler state and update position — visibility separate.
     const state = planetState(planet, simDate);
     obj.state = state;
@@ -2525,10 +2886,34 @@ function showBodyCard(object, x, y, pinned = false) {
   let html;
   if (ud.type === 'constellation') {
     html = formatConstellationCard(ud.constellationId);
-  } else if (ud.type === 'population') {
-    // Population (asteroid belt, Kuiper, Trojans) — формат тот же что у планет,
-    // но без dynamic state (это не одно тело, а коллекция).
+  } else if (ud.type === 'population' || ud.type === 'lagrange') {
+    // Population (asteroid belt, Kuiper, Trojans, Lagrange points, heliosphere
+    // boundaries) — формат тот же что у планет, но без dynamic state.
     html = formatBodyCard(ud.label);
+  } else if (ud.type === 'apsis') {
+    // Маленькая carb-card: тип apsis + planet + distance
+    const planet = planets.find((p) => p.name === ud.planet);
+    if (planet) {
+      const days = (simDate.getTime() - J2000) / MS_PER_DAY;
+      const centuries = days / 36525;
+      const a = elementAt(planet.a, centuries);
+      const e = elementAt(planet.e, centuries);
+      const r = ud.kind === 'perihelion' ? a * (1 - e) : a * (1 + e);
+      html = `
+        <div class="ic-header"><strong>${ud.kind === 'perihelion' ? 'Perihelion' : 'Aphelion'}</strong></div>
+        <div class="ic-body">
+          <div class="ic-row"><span>Planet</span><strong>${ud.planet}</strong></div>
+          <div class="ic-row"><span>Distance</span><strong>${r.toFixed(3)} AU</strong></div>
+          <div class="ic-row"><span>Eccentricity</span><strong>${e.toFixed(4)}</strong></div>
+        </div>
+        <p style="margin:8px 0 0; font-size:0.74rem; color:#cbd5e1; line-height:1.45;">
+          ${ud.kind === 'perihelion'
+            ? 'Closest point to the Sun in this planet\'s orbit. Planet moves fastest here (Kepler\'s 2nd law).'
+            : 'Farthest point from the Sun in this planet\'s orbit. Planet moves slowest here.'}
+        </p>`;
+    } else {
+      html = `<div class="ic-header"><strong>${ud.label}</strong></div>`;
+    }
   } else {
     const label = ud.label;
     const dynState = (ud.type === 'planet')
@@ -2556,10 +2941,27 @@ function hideBodyCard() {
   tooltip.hidden = true;
 }
 
+// Tap vs drag tracking. На touch каждый жест начинается с pointerdown — нельзя
+// сразу показывать карточку, потому что юзер может начинать drag для орбиты.
+// Решение: запоминаем начальную точку. На pointerup проверяем сместился ли палец
+// больше TAP_THRESHOLD_PX. Если не сместился → это tap, показываем карточку.
+// Сместился → drag, ничего не делаем (камера уже отработала через OrbitControls).
+const TAP_THRESHOLD_PX = 6;
+let pointerDownInfo = null; // { x, y, moved }
+
 function onPointerMove(event) {
-  // На touch-устройствах pointermove приходит во время drag — игнорируем, чтобы
-  // карточка не мелькала. На touch info показываем по pointerdown.
+  // Tracking движения между down и up — для tap-vs-drag detection.
+  if (pointerDownInfo) {
+    const dx = event.clientX - pointerDownInfo.x;
+    const dy = event.clientY - pointerDownInfo.y;
+    if (dx * dx + dy * dy > TAP_THRESHOLD_PX * TAP_THRESHOLD_PX) {
+      pointerDownInfo.moved = true;
+    }
+  }
+  // На touch — не показываем карточку при move (драг для орбиты).
+  // На desktop — hover карточка работает только без active pointerdown.
   if (event.pointerType === 'touch') return;
+  if (pointerDownInfo) return; // active drag — не дёргаем hover
 
   pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
   pointer.y = -(event.clientY / window.innerHeight) * 2 + 1;
@@ -2573,27 +2975,32 @@ function onPointerMove(event) {
 }
 
 function onPointerDown(event) {
+  // Просто запоминаем точку, дальше — на pointerup решаем tap vs drag.
+  pointerDownInfo = { x: event.clientX, y: event.clientY, moved: false };
+}
+
+function onPointerUp(event) {
+  if (!pointerDownInfo) return;
+  const wasMoved = pointerDownInfo.moved;
+  pointerDownInfo = null;
+  // Drag — никакой карточки. Камера уже обработана OrbitControls.
+  if (wasMoved) return;
+
+  // Tap — старая onPointerDown логика: raycast + show/focus.
   pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
   pointer.y = -(event.clientY / window.innerHeight) * 2 + 1;
   raycaster.setFromCamera(pointer, camera);
   const hits = raycaster.intersectObjects(selectable, false);
   if (hits.length) {
     const obj = hits[0].object;
-    // Снапим камеру к телу — только если это НОВЫЙ фокус. Иначе каждый клик
-    // (включая mousedown который начинает drag) ресетил камеру в preset offset,
-    // и пользователь не мог свободно вращать вокруг тела. Constellations и
-    // populations (asteroid belt, Kuiper, Trojans) не имеют точки фокуса.
-    if (obj.userData.type !== 'constellation' && obj.userData.type !== 'population') {
+    const t = obj.userData.type;
+    if (t !== 'constellation' && t !== 'population' && t !== 'lagrange' && t !== 'apsis') {
       const newFocus = obj.userData.label;
-      if (newFocus !== focusName) {
-        jumpToFocus(newFocus);
-      }
+      if (newFocus !== focusName) jumpToFocus(newFocus);
     }
-    // На touch — закрепляем карточку чтобы пользователь успел прочитать.
-    // На desktop тоже закрепим — пока не кликнут в пустое место.
     showBodyCard(obj, event.clientX, event.clientY, true);
   } else {
-    // Клик в пустоту — сбрасываем закрепление.
+    // Tap в пустоту — закрываем pinned карточку.
     tooltipPinned = false;
     if (tooltipPinTimeout) clearTimeout(tooltipPinTimeout);
     tooltip.hidden = true;
@@ -2676,6 +3083,10 @@ frameSelect.addEventListener('change', () => {
 
 renderer.domElement.addEventListener('pointermove', onPointerMove);
 renderer.domElement.addEventListener('pointerdown', onPointerDown);
+renderer.domElement.addEventListener('pointerup', onPointerUp);
+// pointercancel — палец сорвался с экрана (например swipe в notification bar) →
+// тоже сбрасываем состояние, иначе следующий drag начнётся с pre-set moved=false.
+renderer.domElement.addEventListener('pointercancel', () => { pointerDownInfo = null; });
 window.addEventListener('resize', onResize);
 
 function togglePanel() {
@@ -2766,15 +3177,17 @@ function applyMode(mode) {
   // Dwarf planets — видны в обоих режимах. cfg.showPlanets gates на mode switch
   // (galactic mode имеет showPlanets=true тоже, проверь MODE_CONFIG если нужно
   // скрывать). По умолчанию: viewable wherever planets are visible.
-  const dwarfsOn = cfg.showPlanets && dwarfPlanetsToggle.checked;
-  for (const planet of dwarfPlanets) {
+  const asteroidNamesSetMode = new Set(namedAsteroids.map((p) => p.name));
+  for (const planet of [...dwarfPlanets, ...namedAsteroids]) {
     const obj = planetObjects.get(planet.name);
     if (!obj) continue;
-    obj.mesh.visible = dwarfsOn;
-    if (obj.orbit) obj.orbit.visible = dwarfsOn && trailsToggle.checked;
-    if (obj.label) obj.label.visible = dwarfsOn && labelsToggle.checked;
-    if (obj.trail) obj.trail.line.visible = dwarfsOn && trailsToggle.checked;
-    if (obj.moonAnchor) obj.moonAnchor.visible = dwarfsOn;
+    const isAsteroid = asteroidNamesSetMode.has(planet.name);
+    const on = cfg.showPlanets && (isAsteroid ? namedAsteroidsToggle.checked : dwarfPlanetsToggle.checked);
+    obj.mesh.visible = on;
+    if (obj.orbit) obj.orbit.visible = on && trailsToggle.checked;
+    if (obj.label) obj.label.visible = on && labelsToggle.checked;
+    if (obj.trail) obj.trail.line.visible = on && trailsToggle.checked;
+    if (obj.moonAnchor) obj.moonAnchor.visible = on;
   }
 
   // 7. Обновляем позицию Sun ДО позиционирования камеры — иначе jumpToFocus
