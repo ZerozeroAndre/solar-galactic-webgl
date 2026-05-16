@@ -161,6 +161,90 @@ export const planets = [
   }
 ];
 
+// Dwarf planets — same Keplerian model as planets. Elements at J2000 from JPL.
+// Mean longitude rate per century derived from orbital period:
+//   rate_L = 360° / period_years × 100
+// Other rates set to 0 (slow precession negligible for visualization accuracy).
+//
+// Sizes are exaggerated for visibility (real Pluto 0.045 R⊕ → would be invisible).
+// `extremeOrbit: true` means aphelion > 100 AU → no static orbit line drawn
+// (would be cluttered or off-scene); only body + live trail visible.
+export const dwarfPlanets = [
+  {
+    name: 'Ceres',
+    color: 0x6b6660,
+    radius: 0.05,
+    actualRadiusKm: 469,
+    a: [2.7660, 0],
+    e: [0.0789, 0],
+    i: [10.59, 0],
+    L: [249.90, 7819.50],
+    longPeri: [153.91, 0],
+    longNode: [80.31, 0]
+  },
+  {
+    name: 'Pluto',
+    color: 0xc4a48a,
+    radius: 0.08,
+    actualRadiusKm: 1188,
+    a: [39.482, 0],
+    e: [0.2488, 0],
+    i: [17.16, 0],
+    L: [238.66, 145.20],
+    longPeri: [224.13, 0],
+    longNode: [110.299, 0]
+  },
+  {
+    name: 'Haumea',
+    color: 0xe5e5e5,
+    radius: 0.06,
+    actualRadiusKm: 816,
+    a: [43.13, 0],
+    e: [0.1955, 0],
+    i: [28.21, 0],
+    L: [218.74, 127.08],
+    longPeri: [0.97, 0],
+    longNode: [121.79, 0]
+  },
+  {
+    name: 'Makemake',
+    color: 0xb85d3a,
+    radius: 0.06,
+    actualRadiusKm: 715,
+    a: [45.79, 0],
+    e: [0.1591, 0],
+    i: [28.99, 0],
+    L: [181.55, 116.18],
+    longPeri: [15.86, 0],
+    longNode: [79.36, 0]
+  },
+  {
+    name: 'Eris',
+    color: 0xd0d4cc,
+    radius: 0.08,
+    actualRadiusKm: 1163,
+    a: [67.78, 0],
+    e: [0.4407, 0],
+    i: [44.04, 0],
+    L: [35.38, 64.40],
+    longPeri: [187.59, 0],
+    longNode: [35.95, 0]
+  },
+  {
+    name: 'Sedna',
+    color: 0x8b3a2a,
+    radius: 0.05,
+    actualRadiusKm: 498,
+    a: [506.84, 0],
+    e: [0.8527, 0],
+    i: [11.93, 0],
+    L: [93.76, 3.158],
+    longPeri: [95.91, 0],
+    longNode: [144.42, 0],
+    extremeOrbit: true // aphelion ~937 AU — orbit not drawn, only body + trail
+  }
+];
+
 export function normalizeAngle(rad) {
   return ((rad % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
 }

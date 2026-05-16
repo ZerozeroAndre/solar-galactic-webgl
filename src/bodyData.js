@@ -299,6 +299,153 @@ export const BODY_DATA = {
       'Likely a captured asteroid'
     ],
     wiki: 'https://en.wikipedia.org/wiki/Deimos_(moon)'
+  },
+
+  // ── Dwarf planets ──────────────────────────────────────────────────────────
+
+  Ceres: {
+    type: 'Dwarf planet (asteroid belt)',
+    mass: '9.39 × 10²⁰ kg  (0.000157 M⊕)',
+    radius: '469 km  (0.0735 R⊕)',
+    density: '2.16 g/cm³',
+    distance: '2.77 AU  (414 Mkm)',
+    orbitalPeriod: '4.60 Earth years',
+    dayLength: '9 h 4 min',
+    surfaceTemp: '−105 °C average',
+    atmosphere: 'Trace water vapor (transient)',
+    moons: 0,
+    facts: [
+      'Largest object in the asteroid belt — holds ~1/3 of the belt\'s mass',
+      'Has internal liquid water reservoirs (Dawn mission, 2015)',
+      'Was classified as a planet 1801–1850, then asteroid, now dwarf planet'
+    ],
+    wiki: 'https://en.wikipedia.org/wiki/Ceres_(dwarf_planet)'
+  },
+
+  Pluto: {
+    type: 'Dwarf planet (Kuiper belt)',
+    mass: '1.30 × 10²² kg  (0.00218 M⊕)',
+    radius: '1 188 km  (0.186 R⊕)',
+    density: '1.86 g/cm³',
+    distance: '39.48 AU  (5 906 Mkm)',
+    orbitalPeriod: '247.94 Earth years',
+    dayLength: '6.39 Earth days',
+    surfaceTemp: '−229 °C average',
+    atmosphere: 'Thin N₂ + CH₄ + CO (collapses when farther from Sun)',
+    moons: 5,
+    axialTilt: '122.53° (retrograde rotation)',
+    facts: [
+      'Heart-shaped region "Tombaugh Regio" visible — frozen nitrogen plains',
+      'Orbits inside Neptune\'s orbit for part of its year (1979–1999)',
+      'New Horizons flyby (2015) revealed mountains, glaciers, hazy atmosphere',
+      'Demoted from planet to dwarf planet in 2006 (IAU)'
+    ],
+    wiki: 'https://en.wikipedia.org/wiki/Pluto'
+  },
+
+  Charon: {
+    type: 'Largest moon of Pluto',
+    parent: 'Pluto',
+    radius: '606 km  (half the radius of Pluto)',
+    orbitalPeriod: '6.387 days',
+    surfaceTemp: '−220 °C',
+    facts: [
+      'Pluto-Charon system has barycentre OUTSIDE Pluto — they orbit each other',
+      'Mutually tidally locked — same face always points to Pluto, and vice versa',
+      'Dark red north polar cap "Mordor Macula" — tholins from Pluto\'s escaping methane'
+    ],
+    wiki: 'https://en.wikipedia.org/wiki/Charon_(moon)'
+  },
+
+  Haumea: {
+    type: 'Dwarf planet (Kuiper belt)',
+    mass: '4.01 × 10²¹ kg  (0.000671 M⊕)',
+    radius: '816 km  (mean; highly elongated)',
+    density: '2.6 g/cm³',
+    distance: '43.13 AU',
+    orbitalPeriod: '283.28 Earth years',
+    dayLength: '3.92 hours  (fastest large-body rotation in the Solar System!)',
+    surfaceTemp: '−240 °C',
+    moons: 2,
+    axialTilt: '28.21°',
+    facts: [
+      'Egg-shaped (2 100 × 1 680 × 1 074 km) — spins so fast it deforms',
+      'Has a thin ring — first dwarf planet known to have one (discovered 2017)',
+      'Mostly water ice with high albedo — brightest known KBO surface'
+    ],
+    wiki: 'https://en.wikipedia.org/wiki/Haumea'
+  },
+
+  Makemake: {
+    type: 'Dwarf planet (Kuiper belt)',
+    mass: '3.1 × 10²¹ kg  (0.000519 M⊕)',
+    radius: '715 km  (0.112 R⊕)',
+    density: '2.1 g/cm³',
+    distance: '45.79 AU',
+    orbitalPeriod: '309.88 Earth years',
+    dayLength: '22.83 hours',
+    surfaceTemp: '−243 °C',
+    atmosphere: 'None detected (very thin if any)',
+    moons: 1,
+    axialTilt: '28.99°',
+    facts: [
+      'Red-brown surface from frozen methane and ethane',
+      'One of the largest "classical" KBOs (cubewanos)',
+      'Named after Rapa Nui (Easter Island) creation deity'
+    ],
+    wiki: 'https://en.wikipedia.org/wiki/Makemake'
+  },
+
+  Eris: {
+    type: 'Dwarf planet (scattered disc)',
+    mass: '1.66 × 10²² kg  (0.00278 M⊕  — heavier than Pluto!)',
+    radius: '1 163 km  (0.182 R⊕)',
+    density: '2.43 g/cm³',
+    distance: '67.86 AU',
+    orbitalPeriod: '559 Earth years',
+    dayLength: '~25.9 hours',
+    surfaceTemp: '−243 °C',
+    atmosphere: 'N₂ ice (sublimates near perihelion)',
+    moons: 1,
+    axialTilt: '44.04°',
+    facts: [
+      'Discovery (2005) triggered the 2006 reclassification of Pluto',
+      '27% more massive than Pluto but slightly smaller in radius',
+      'Currently near aphelion (97.5 AU) — its year is just past midnight'
+    ],
+    wiki: 'https://en.wikipedia.org/wiki/Eris_(dwarf_planet)'
+  },
+
+  Dysnomia: {
+    type: 'Only moon of Eris',
+    parent: 'Eris',
+    radius: '350 km (irregular)',
+    orbitalPeriod: '15.79 days',
+    facts: [
+      'Used to measure Eris\'s mass — orbital period gives the central mass',
+      'Named after the daughter of Eris (Greek goddess of lawlessness)',
+      'Surface very dark — possibly post-impact remnant'
+    ],
+    wiki: 'https://en.wikipedia.org/wiki/Dysnomia_(moon)'
+  },
+
+  Sedna: {
+    type: 'Dwarf planet candidate (extreme TNO)',
+    mass: '~10²¹ kg  (estimated, very uncertain)',
+    radius: '~498 km',
+    distance: '506 AU average  (perihelion 76 AU, aphelion 937 AU!)',
+    orbitalPeriod: '~11 400 Earth years',
+    dayLength: '~10 hours',
+    surfaceTemp: '−262 °C',
+    moons: 0,
+    axialTilt: '~11.93°',
+    facts: [
+      'Most distant known major body — currently 84 AU from the Sun (2026)',
+      'Extreme orbit suggests perturbation by an unseen massive body ("Planet Nine")',
+      'Hasn\'t completed one full orbit since the last Ice Age ended',
+      'Surface is one of the reddest in the Solar System — tholins on methane ice'
+    ],
+    wiki: 'https://en.wikipedia.org/wiki/Sedna_(dwarf_planet)'
   }
 };
 

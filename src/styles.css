@@ -260,6 +260,60 @@ button.primary {
   gap: 8px;
 }
 
+.beyond-planets {
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 7px;
+  background: rgba(15, 23, 42, 0.4);
+  padding: 0;
+}
+
+.beyond-planets summary {
+  cursor: pointer;
+  padding: 8px 12px;
+  color: #cbd5e1;
+  font-size: 0.82rem;
+  font-weight: 600;
+  user-select: none;
+  list-style: none;
+  position: relative;
+}
+
+.beyond-planets summary::-webkit-details-marker {
+  display: none;
+}
+
+.beyond-planets summary::after {
+  content: '+';
+  position: absolute;
+  right: 12px;
+  top: 8px;
+  color: #94a3b8;
+  font-weight: 400;
+}
+
+.beyond-planets[open] summary::after {
+  content: '−';
+}
+
+.beyond-planets[open] summary {
+  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+  margin-bottom: 4px;
+}
+
+.beyond-planets label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  font-weight: 500;
+  font-size: 0.8rem;
+  color: #cbd5e1;
+}
+
+.beyond-planets input[type="checkbox"] {
+  accent-color: #38bdf8;
+}
+
 .toggles label {
   display: flex;
   align-items: center;

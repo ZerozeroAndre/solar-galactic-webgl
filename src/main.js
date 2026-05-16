@@ -11,6 +11,7 @@ import {
   J2000,
   MS_PER_DAY,
   applyEclipticTilt,
+  dwarfPlanets,
   eclipticFromCartesian,
   eclipticToEquatorial,
   equatorialToHorizontal,
@@ -39,6 +40,7 @@ const trailsToggle = document.querySelector('#trailsToggle');
 const galaxyToggle = document.querySelector('#galaxyToggle');
 const orbitPathToggle = document.querySelector('#orbitPathToggle');
 const nbodyToggle = document.querySelector('#nbodyToggle');
+const dwarfPlanetsToggle = document.querySelector('#dwarfPlanetsToggle');
 const nbodyTmpVec = new THREE.Vector3();
 const labelsToggle = document.querySelector('#labelsToggle');
 const planetList = document.querySelector('#planetList');
@@ -81,6 +83,16 @@ const MOONS = {
   ],
   Saturn: [
     { name: 'Titan', dist: 4.5, period: 15.945, radius: 0.13, color: 0xe6a560, phase: 2.1 }
+  ],
+  Pluto: [
+    // Charon — Pluto's largest moon, mutually tidally locked (barycentre actually
+    // outside Pluto). Real distance ~17 500 km = 14.7 Pluto radii; compressed to 2.5
+    // to match Earth-Moon visual convention.
+    { name: 'Charon', dist: 2.5, period: 6.387, radius: 0.045, color: 0xa89684, phase: 1.2 }
+  ],
+  Eris: [
+    // Dysnomia — only known moon of Eris. Real distance ~37 300 km = 32 Eris radii.
+    { name: 'Dysnomia', dist: 4.0, period: 15.786, radius: 0.025, color: 0x807a72, phase: 0.4 }
   ]
 };
 
@@ -1064,11 +1076,93 @@ function buildScene() {
       worldPosition: new THREE.Vector3()
     });
   }
+
+  // ── Dwarf planets ──────────────────────────────────────────────────────────
+  // Same pipeline as planets (sphere + orbit + label + trail), but always
+  // MeshStandardMaterial with solid color (no textures). Extreme orbits like
+  // Sedna get no static orbit line — only the body and live trail are shown.
+  for (const planet of dwarfPlanets) {
+    const geometry = new THREE.SphereGeometry(planet.radius, 32, 16);
+    const material = new THREE.MeshStandardMaterial({
+      color: planet.color,
+      roughness: 0.92,
+      metalness: 0.0
+    });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.name = planet.name;
+    mesh.userData = { label: planet.name, type: 'planet', planet };
+    solarRoot.add(mesh);
+    selectable.push(mesh);
+
+    let orbit = null;
+    if (!planet.extremeOrbit) {
+      orbit = makeOrbitLine(planet);
+      solarRoot.add(orbit);
+    }
+
+    const label = makeLabel(planet.name, '#cbd5e1');
+    label.scale.set(7, 1.75, 1);
+    solarRoot.add(label);
+
+    const trail = makeTrail(planet.color);
+    trailRoot.add(trail.line);
+
+    // Луны карликовых планет: те же что у обычных, через MOONS dict.
+    let moonAnchor = null;
+    const moonObjs = [];
+    const moonData = MOONS[planet.name];
+    if (moonData) {
+      moonAnchor = new THREE.Group();
+      solarRoot.add(moonAnchor);
+      for (const moon of moonData) {
+        const moonGeom = new THREE.SphereGeometry(moon.radius, 24, 12);
+        const moonMat = new THREE.MeshStandardMaterial({
+          color: moon.color, roughness: 0.94, metalness: 0.0
+        });
+        const moonMesh = new THREE.Mesh(moonGeom, moonMat);
+        moonMesh.name = moon.name;
+        moonMesh.userData = { label: moon.name, type: 'moon', moon, parent: planet.name };
+        moonAnchor.add(moonMesh);
+        selectable.push(moonMesh);
+
+        const moonLabel = makeLabel(moon.name, '#94a3b8');
+        moonLabel.scale.set(4.5, 1.1, 1);
+        moonAnchor.add(moonLabel);
+
+        const moonObj = {
+          data: moon,
+          mesh: moonMesh,
+          label: moonLabel,
+          worldPosition: new THREE.Vector3()
+        };
+        moonObjs.push(moonObj);
+        planetObjects.set(moon.name, moonObj);
+      }
+    }
+
+    planetObjects.set(planet.name, {
+      mesh,
+      orbit,
+      label,
+      trail,
+      moonAnchor,
+      moons: moonObjs,
+      state: null,
+      worldPosition: new THREE.Vector3(),
+      isDwarf: true
+    });
+  }
 }
 
 function buildUi() {
   const focusOptions = ['Free', 'Sun'];
   for (const p of planets) {
+    focusOptions.push(p.name);
+    const moonsForPlanet = MOONS[p.name] || [];
+    for (const m of moonsForPlanet) focusOptions.push(`  ↳ ${m.name}`);
+  }
+  // Dwarf planets — добавляем в dropdown после регулярных планет.
+  for (const p of dwarfPlanets) {
     focusOptions.push(p.name);
     const moonsForPlanet = MOONS[p.name] || [];
     for (const m of moonsForPlanet) focusOptions.push(`  ↳ ${m.name}`);
@@ -1247,6 +1341,13 @@ function appendLiveTrailSamples(fromDate, toDate, referenceFrame) {
       const obj = planetObjects.get(planet.name);
       pushTrailSample(obj.trail, planetTrailPoint(planet, sampleDate, referenceFrame), sampleTime);
     }
+    // Dwarf planets — те же сэмплы trail только если их toggle включён.
+    if (dwarfPlanetsToggle.checked) {
+      for (const planet of dwarfPlanets) {
+        const obj = planetObjects.get(planet.name);
+        if (obj) pushTrailSample(obj.trail, planetTrailPoint(planet, sampleDate, referenceFrame), sampleTime);
+      }
+    }
   }
 
   lastTrailDate = new Date(toDate.getTime());
@@ -1415,6 +1516,57 @@ function updateScene(deltaSeconds) {
 
     const distanceEl = document.querySelector(`#distance-${planet.name}`);
     if (distanceEl) distanceEl.textContent = `${state.radiusAu.toFixed(2)} AU`;
+  }
+
+  // ── Dwarf planets per-frame update ────────────────────────────────────────
+  // Тот же pipeline что у регулярных планет, но без N-body override и без axial
+  // spin (нет надёжных данных по периодам вращения для всех 6). Видимость
+  // целиком зависит от dwarfPlanetsToggle.
+  const dwarfsVisible = dwarfPlanetsToggle.checked && currentMode === 'solar';
+  for (const planet of dwarfPlanets) {
+    const obj = planetObjects.get(planet.name);
+    if (!obj) continue;
+    obj.mesh.visible = dwarfsVisible;
+    obj.label.visible = dwarfsVisible && labelsToggle.checked;
+    if (obj.orbit) {
+      obj.orbit.visible = dwarfsVisible && trailsToggle.checked;
+      if (obj.orbit.visible) {
+        const state = planetState(planet, simDate);
+        obj.state = state;
+        obj.mesh.position.copy(state.position);
+        obj.label.position.copy(state.position).add(new THREE.Vector3(0, planet.radius + 0.6, 0));
+        obj.label.scale.setScalar(Math.max(0.55, camera.position.distanceTo(obj.mesh.position) * LABEL_SCALE * 0.7));
+        updateOrbitGradient(obj.orbit, state.position);
+      }
+    }
+    // Even when orbit is hidden, body should still move (so we can see it).
+    if (dwarfsVisible && (!obj.orbit || !obj.orbit.visible)) {
+      const state = planetState(planet, simDate);
+      obj.state = state;
+      obj.mesh.position.copy(state.position);
+      obj.label.position.copy(state.position).add(new THREE.Vector3(0, planet.radius + 0.6, 0));
+      obj.label.scale.setScalar(Math.max(0.55, camera.position.distanceTo(obj.mesh.position) * LABEL_SCALE * 0.7));
+    }
+    obj.mesh.getWorldPosition(obj.worldPosition);
+    obj.trail.line.visible = dwarfsVisible && trailsToggle.checked;
+
+    // Луны карликовых (Charon, Dysnomia)
+    if (obj.moonAnchor) {
+      obj.moonAnchor.visible = dwarfsVisible;
+      if (dwarfsVisible) {
+        obj.moonAnchor.position.copy(obj.mesh.position);
+        for (const moonObj of obj.moons) {
+          const angle = (simDays / moonObj.data.period) * Math.PI * 2 + moonObj.data.phase;
+          const r = moonObj.data.dist * planet.radius;
+          moonObj.mesh.position.set(r * Math.cos(angle), 0, r * Math.sin(angle));
+          moonObj.mesh.rotation.y = Math.PI - angle;
+          moonObj.mesh.getWorldPosition(moonObj.worldPosition);
+          moonObj.label.position.copy(moonObj.mesh.position).add(new THREE.Vector3(0, moonObj.data.radius + 0.18, 0));
+          moonObj.label.scale.setScalar(Math.max(0.4, camera.position.distanceTo(moonObj.worldPosition) * LABEL_SCALE * 0.45));
+          moonObj.label.visible = labelsToggle.checked;
+        }
+      }
+    }
   }
 
   if (!paused) appendLiveTrailSamples(previousTrailDate, simDate, referenceFrame);
@@ -1665,6 +1817,17 @@ function applyMode(mode) {
       obj.trail.line.visible = cfg.showPlanets && trailsToggle.checked;
     }
     if (obj.moonAnchor) obj.moonAnchor.visible = cfg.showPlanets;
+  }
+  // Dwarf planets — видны только в solar mode + если toggle включён.
+  const dwarfsOn = cfg.showPlanets && dwarfPlanetsToggle.checked && mode === 'solar';
+  for (const planet of dwarfPlanets) {
+    const obj = planetObjects.get(planet.name);
+    if (!obj) continue;
+    obj.mesh.visible = dwarfsOn;
+    if (obj.orbit) obj.orbit.visible = dwarfsOn && trailsToggle.checked;
+    if (obj.label) obj.label.visible = dwarfsOn && labelsToggle.checked;
+    if (obj.trail) obj.trail.line.visible = dwarfsOn && trailsToggle.checked;
+    if (obj.moonAnchor) obj.moonAnchor.visible = dwarfsOn;
   }
 
   // 7. Обновляем позицию Sun ДО позиционирования камеры — иначе jumpToFocus
