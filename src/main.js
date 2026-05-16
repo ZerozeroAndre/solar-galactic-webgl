@@ -2,6 +2,7 @@ import './styles.css';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { formatBodyCard } from './bodyData.js';
+import { advanceNBody, getNBodyPosition, resetNBody, isNBodyReady } from './nbody.js';
 import {
   AU_SCALE,
   DEG,
@@ -37,6 +38,8 @@ const frameSelect = document.querySelector('#frameSelect');
 const trailsToggle = document.querySelector('#trailsToggle');
 const galaxyToggle = document.querySelector('#galaxyToggle');
 const orbitPathToggle = document.querySelector('#orbitPathToggle');
+const nbodyToggle = document.querySelector('#nbodyToggle');
+const nbodyTmpVec = new THREE.Vector3();
 const labelsToggle = document.querySelector('#labelsToggle');
 const planetList = document.querySelector('#planetList');
 const tooltip = document.querySelector('#tooltip');
@@ -1401,11 +1404,32 @@ function updateScene(deltaSeconds) {
     mwTrail.line.visible = trailsToggle.checked && referenceFrame === 'extragalactic';
   }
 
+  // Real-physics mode: integrate N-body system to current simDate. Falls back
+  // to Kepler if user is in galactic view (where the whole solar root moves on
+  // a circular orbit anyway and N-body would conflict with that motion).
+  const nbodyOn = nbodyToggle.checked && !inGalacticView;
+  if (nbodyOn) {
+    advanceNBody(simDate);
+  } else if (isNBodyReady()) {
+    // Toggle is off but state exists — keep it in sync with simDate so that
+    // when user re-enables, integration resumes from a sensible state.
+    resetNBody(simDate);
+  }
+
   const simDays = (simDate.getTime() - J2000) / MS_PER_DAY;
   for (const planet of planets) {
     const obj = planetObjects.get(planet.name);
     const state = planetState(planet, simDate);
     obj.state = state;
+    // In real-physics mode, OVERRIDE position from N-body integrator. Kepler
+    // state is still computed so we keep dynamic info (radiusAu for tooltips).
+    if (nbodyOn) {
+      const nbodyPos = getNBodyPosition(planet.name, nbodyTmpVec);
+      if (nbodyPos) {
+        state.position.copy(nbodyPos);
+        state.radiusAu = Math.sqrt(nbodyPos.x * nbodyPos.x + nbodyPos.y * nbodyPos.y + nbodyPos.z * nbodyPos.z) / AU_SCALE;
+      }
+    }
     obj.mesh.position.copy(state.position);
     // Физически корректное вращение планеты вокруг собственной оси:
     //   • Tilt применён через rotation.x (НЕ rotation.z как раньше) — наклон оси

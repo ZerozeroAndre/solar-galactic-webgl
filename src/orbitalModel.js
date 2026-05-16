@@ -35,6 +35,20 @@ export function applyEclipticTilt(vec) {
   return new THREE.Vector3(vec.x, y, z);
 }
 
+// Keplerian elements from NASA "Approximate Positions of the Planets" — Table 2a
+// (valid 3000 BC – 3000 AD; replaces the narrower 1800-2050 fit). Outer planets
+// (Jupiter+) also carry b/c/s/f correction terms from Table 2b which add a
+// quadratic + periodic term to mean anomaly to capture Jupiter-Saturn near-resonance.
+// Source: https://ssd.jpl.nasa.gov/planets/approx_pos.html
+//
+// Format per element: [value at J2000, rate per Julian century]. T = centuries
+// past J2000 (computed in planetState).
+//
+// "correction" object on outer planets adds:
+//   M_corrected = M + b·T² + c·cos(f·T) + s·sin(f·T)    (everything in degrees)
+//
+// Earth row is for Earth-Moon barycentre — fine for visualisation; the Sun-Earth
+// vector differs from EM-Bary by ~5e-5 AU (<0.01 of an Earth radius).
 export const planets = [
   {
     name: 'Mercury',
@@ -42,12 +56,12 @@ export const planets = [
     radius: 0.14,
     actualRadiusKm: 2440,
     textureBands: [0x8f8175, 0xd7cabd],
-    a: [0.38709927, 0.00000037],
-    e: [0.20563593, 0.00001906],
-    i: [7.00497902, -0.00594749],
-    L: [252.2503235, 149472.67411175],
-    longPeri: [77.45779628, 0.16047689],
-    longNode: [48.33076593, -0.12534081]
+    a: [0.38709843, 0.00000000],
+    e: [0.20563661, 0.00002123],
+    i: [7.00559432, -0.00590158],
+    L: [252.25166724, 149472.67486623],
+    longPeri: [77.45771895, 0.15940013],
+    longNode: [48.33961819, -0.12214182]
   },
   {
     name: 'Venus',
@@ -55,12 +69,12 @@ export const planets = [
     radius: 0.22,
     actualRadiusKm: 6052,
     textureBands: [0xb78b4c, 0xf1d08a],
-    a: [0.72333566, 0.0000039],
-    e: [0.00677672, -0.00004107],
-    i: [3.39467605, -0.0007889],
-    L: [181.9790995, 58517.81538729],
-    longPeri: [131.60246718, 0.00268329],
-    longNode: [76.67984255, -0.27769418]
+    a: [0.72332102, -0.00000026],
+    e: [0.00676399, -0.00005107],
+    i: [3.39777545, 0.00043494],
+    L: [181.97970850, 58517.81560260],
+    longPeri: [131.76755713, 0.05679648],
+    longNode: [76.67261496, -0.27274174]
   },
   {
     name: 'Earth',
@@ -68,12 +82,12 @@ export const planets = [
     radius: 0.24,
     actualRadiusKm: 6371,
     textureBands: [0x2563eb, 0x22c55e, 0xdbeafe],
-    a: [1.00000261, 0.00000562],
-    e: [0.01671123, -0.00004392],
-    i: [-0.00001531, -0.01294668],
-    L: [100.46457166, 35999.37244981],
-    longPeri: [102.93768193, 0.32327364],
-    longNode: [0, 0]
+    a: [1.00000018, -0.00000003],
+    e: [0.01673163, -0.00003661],
+    i: [-0.00054346, -0.01337178],
+    L: [100.46691572, 35999.37306329],
+    longPeri: [102.93005885, 0.31795260],
+    longNode: [-5.11260389, -0.24123856]
   },
   {
     name: 'Mars',
@@ -81,12 +95,12 @@ export const planets = [
     radius: 0.19,
     actualRadiusKm: 3390,
     textureBands: [0x8f3a1f, 0xe06b39, 0xf2ad7c],
-    a: [1.52371034, 0.00001847],
-    e: [0.0933941, 0.00007882],
-    i: [1.84969142, -0.00813131],
-    L: [-4.55343205, 19140.30268499],
-    longPeri: [-23.94362959, 0.44441088],
-    longNode: [49.55953891, -0.29257343]
+    a: [1.52371243, 0.00000097],
+    e: [0.09336511, 0.00009149],
+    i: [1.85181869, -0.00724757],
+    L: [-4.56813164, 19140.29934243],
+    longPeri: [-23.91744784, 0.45223625],
+    longNode: [49.71320984, -0.26852431]
   },
   {
     name: 'Jupiter',
@@ -94,12 +108,13 @@ export const planets = [
     radius: 0.58,
     actualRadiusKm: 69911,
     textureBands: [0x8b5e34, 0xd9b382, 0xf2dcc2, 0xb87943],
-    a: [5.202887, -0.00011607],
-    e: [0.04838624, -0.00013253],
-    i: [1.30439695, -0.00183714],
-    L: [34.39644051, 3034.74612775],
-    longPeri: [14.72847983, 0.21252668],
-    longNode: [100.47390909, 0.20469106]
+    a: [5.20248019, -0.00002864],
+    e: [0.04853590, 0.00018026],
+    i: [1.29861416, -0.00322699],
+    L: [34.33479152, 3034.90371757],
+    longPeri: [14.27495244, 0.18199196],
+    longNode: [100.29282654, 0.13024619],
+    correction: { b: -0.00012452, c: 0.06064060, s: -0.35635438, f: 38.35125000 }
   },
   {
     name: 'Saturn',
@@ -108,12 +123,13 @@ export const planets = [
     actualRadiusKm: 58232,
     textureBands: [0x8d7447, 0xf1dca6, 0xcaa66a],
     rings: true,
-    a: [9.53667594, -0.0012506],
-    e: [0.05386179, -0.00050991],
-    i: [2.48599187, 0.00193609],
-    L: [49.95424423, 1222.49362201],
-    longPeri: [92.59887831, -0.41897216],
-    longNode: [113.66242448, -0.28867794]
+    a: [9.54149883, -0.00003065],
+    e: [0.05550825, -0.00032044],
+    i: [2.49424102, 0.00451969],
+    L: [50.07571329, 1222.11494724],
+    longPeri: [92.86136063, 0.54179478],
+    longNode: [113.63998702, -0.25015002],
+    correction: { b: 0.00025899, c: -0.13434469, s: 0.87320147, f: 38.35125000 }
   },
   {
     name: 'Uranus',
@@ -121,12 +137,13 @@ export const planets = [
     radius: 0.38,
     actualRadiusKm: 25362,
     textureBands: [0x5ed0d8, 0xb8fbff],
-    a: [19.18916464, -0.00196176],
-    e: [0.04725744, -0.00004397],
-    i: [0.77263783, -0.00242939],
-    L: [313.23810451, 428.48202785],
-    longPeri: [170.9542763, 0.40805281],
-    longNode: [74.01692503, 0.04240589]
+    a: [19.18797948, -0.00020455],
+    e: [0.04685740, -0.00001550],
+    i: [0.77298127, -0.00180155],
+    L: [314.20276625, 428.49512595],
+    longPeri: [172.43404441, 0.09266985],
+    longNode: [73.96250215, 0.05739699],
+    correction: { b: 0.00058331, c: -0.97731848, s: 0.17689245, f: 7.67025000 }
   },
   {
     name: 'Neptune',
@@ -134,12 +151,13 @@ export const planets = [
     radius: 0.37,
     actualRadiusKm: 24622,
     textureBands: [0x1e3a8a, 0x477bff, 0x93c5fd],
-    a: [30.06992276, 0.00026291],
-    e: [0.00859048, 0.00005105],
-    i: [1.77004347, 0.00035372],
-    L: [-55.12002969, 218.45945325],
-    longPeri: [44.96476227, -0.32241464],
-    longNode: [131.78422574, -0.00508664]
+    a: [30.06952752, 0.00006447],
+    e: [0.00895439, 0.00000818],
+    i: [1.77005520, 0.00022400],
+    L: [304.22289287, 218.46515314],
+    longPeri: [46.68158724, 0.01009938],
+    longNode: [131.78635853, -0.00606302],
+    correction: { b: -0.00041348, c: 0.68346318, s: -0.10162547, f: 7.67025000 }
   }
 ];
 
@@ -172,7 +190,16 @@ export function planetState(planet, date) {
   const longitudePerihelion = elementAt(planet.longPeri, centuries) * DEG;
   const longitudeNode = elementAt(planet.longNode, centuries) * DEG;
   const argumentPerihelion = longitudePerihelion - longitudeNode;
-  const meanAnomaly = normalizeAngle(meanLongitude - longitudePerihelion);
+  // Mean anomaly + Table 2b periodic correction for outer planets (3000BC-3000AD).
+  // Coefficients in degrees, f in deg/century — applied as: b·T² + c·cos(f·T·DEG) + s·sin(f·T·DEG).
+  let meanAnomaly = meanLongitude - longitudePerihelion;
+  if (planet.correction) {
+    const { b, c, s, f } = planet.correction;
+    const T = centuries;
+    const ft = f * T * DEG;
+    meanAnomaly += (b * T * T + c * Math.cos(ft) + s * Math.sin(ft)) * DEG;
+  }
+  meanAnomaly = normalizeAngle(meanAnomaly);
   const eccentricAnomaly = solveKepler(meanAnomaly, e);
 
   const xv = a * (Math.cos(eccentricAnomaly) - e);
