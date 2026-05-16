@@ -81,7 +81,14 @@ const TRAIL_CAPACITY = 4096;
 // Размер луны в сценических единицах. Phase — начальный угол на 0 J2000.
 const MOONS = {
   Earth: [
-    { name: 'Moon', dist: 2.5, period: 27.32, radius: 0.075, color: 0xcfcfcf, phase: 0.5 }
+    // Inclination 5.145° к эклиптике — ключевая величина для эклипсов: без неё
+    // Луна каждое новолуние/полнолуние идеально выровнена с Солнцем и эклипсы
+    // происходили бы 24× в год вместо реальных 4-7. Node longitude ~125° (J2000
+    // value; реальный node прецессирует с периодом 18.6 года, здесь зафиксирован).
+    {
+      name: 'Moon', dist: 2.5, period: 27.32, radius: 0.075, color: 0xcfcfcf, phase: 0.5,
+      inclination: 5.145, node: 125
+    }
   ],
   Jupiter: [
     { name: 'Io', dist: 2.0, period: 1.769, radius: 0.10, color: 0xf5d97a, phase: 0.1 },
@@ -1726,15 +1733,40 @@ const PHASE_NAMES = [
   ['Waning Crescent', '🌘']
 ];
 
+// Position of a moon in the ecliptic frame, with optional inclination/node.
+// For moons without these fields (Galilean, Phobos, etc.) defaults to flat orbit.
+function moonOrbitPosition(moonData, simDaysVal, parentRadius) {
+  const angle = (simDaysVal / moonData.period) * Math.PI * 2 + moonData.phase;
+  const r = moonData.dist * parentRadius;
+  let x = r * Math.cos(angle);
+  let z = r * Math.sin(angle);
+  let y = 0;
+  if (moonData.inclination) {
+    const i = moonData.inclination * DEG;
+    const cosI = Math.cos(i);
+    const sinI = Math.sin(i);
+    const y2 = y * cosI - z * sinI;
+    const z2 = y * sinI + z * cosI;
+    y = y2; z = z2;
+  }
+  if (moonData.node) {
+    const n = moonData.node * DEG;
+    const cosN = Math.cos(n);
+    const sinN = Math.sin(n);
+    const x3 = x * cosN + z * sinN;
+    const z3 = -x * sinN + z * cosN;
+    x = x3; z = z3;
+  }
+  return new THREE.Vector3(x, y, z);
+}
+
 function computeMoonEntry(date, earthHelio, sunEntry) {
   const moonData = MOONS.Earth && MOONS.Earth[0];
   if (!moonData) return null;
   const simDaysLocal = (date.getTime() - J2000) / MS_PER_DAY;
-  const angle = (simDaysLocal / moonData.period) * Math.PI * 2 + moonData.phase;
-  const r = moonData.dist * earthPlanet.radius;
-  // Геоцентрическое положение Луны в сценических координатах (Y=0 — упрощение,
-  // реальная орбита Луны наклонена 5.14° к эклиптике, но это <0.1° для phase).
-  const moonGeo = new THREE.Vector3(r * Math.cos(angle), 0, r * Math.sin(angle));
+  // Inclined-orbit position (5.14° tilt + 125° node) — нужно для корректного
+  // eclipse detection: иначе Moon идеально в плоскости с Sun, эклипсы каждые 27 дней.
+  const moonGeo = moonOrbitPosition(moonData, simDaysLocal, earthPlanet.radius);
   // Гелиоцентрическое положение Луны = Земля + relative
   const moonHelio = earthHelio.clone().add(moonGeo);
   // Phase angle = угол Sun-Moon-Earth (от Луны)
@@ -1760,6 +1792,66 @@ function computeMoonEntry(date, earthHelio, sunEntry) {
   entry.illumination = illumination;
   entry.phaseAngleDeg = phaseAngle * 180 / Math.PI;
   return entry;
+}
+
+// Eclipse detection from current geocentric geometry. Inclination of Moon
+// (5.14° to ecliptic) makes most new/full moons NOT eclipses — only when
+// Moon is near a node during new/full → angular alignment with Sun (solar)
+// or with anti-Sun (lunar) within ~1°.
+const SUN_ANGULAR_RADIUS_DEG = 0.265; // ~16 arcmin at 1 AU
+const MOON_ANGULAR_RADIUS_DEG = 0.259; // ~15.5 arcmin
+const EARTH_UMBRA_AT_MOON_DEG = 0.68; // ~41 arcmin (radius of Earth's umbra cone at Moon distance)
+
+function computeEclipses(sunEntry, moonEntry) {
+  if (!moonEntry) return { solar: null, lunar: null };
+  // Solar eclipse: New Moon (low illumination) + Moon angularly close to Sun
+  const sep = sphericalDistance(sunEntry.ra, sunEntry.dec, moonEntry.ra, moonEntry.dec);
+  const sepDeg = sep * 180 / Math.PI;
+  let solar = null;
+  if (moonEntry.illumination < 0.05) {
+    const sumRadii = SUN_ANGULAR_RADIUS_DEG + MOON_ANGULAR_RADIUS_DEG;
+    if (sepDeg < sumRadii) {
+      // Linear coverage approximation — точное вычисление через сечение двух дисков
+      // сложнее, но визуальная точность сравнима для education-purposes.
+      const coverage = Math.max(0, 1 - sepDeg / sumRadii);
+      solar = { coverage, sepDeg, totality: sepDeg < Math.abs(SUN_ANGULAR_RADIUS_DEG - MOON_ANGULAR_RADIUS_DEG) };
+    }
+  }
+  // Lunar eclipse: Full Moon (high illumination) + Moon angularly opposite Sun
+  // (within Earth's umbra cone at Moon distance, ~0.68°)
+  let lunar = null;
+  if (moonEntry.illumination > 0.95) {
+    // Угловое расстояние от точки антисолнца до Луны
+    const antiSolDeg = (Math.PI - sep) * 180 / Math.PI;
+    const umbraTotal = EARTH_UMBRA_AT_MOON_DEG + MOON_ANGULAR_RADIUS_DEG;
+    if (antiSolDeg < umbraTotal) {
+      const coverage = Math.max(0, 1 - antiSolDeg / umbraTotal);
+      lunar = { coverage, oppositionDeg: antiSolDeg, totality: antiSolDeg < EARTH_UMBRA_AT_MOON_DEG - MOON_ANGULAR_RADIUS_DEG };
+    }
+  }
+  return { solar, lunar };
+}
+
+// Twilight categories по высоте Солнца (стандарт astronomy):
+//   +90° to 0°  : Day
+//   0° to -6°   : Civil twilight  (объекты видны как тени; уличные фонари)
+//   -6° to -12° : Nautical twilight (горизонт ещё различим)
+//   -12° to -18°: Astronomical twilight (рассвет/закат для астрономов)
+//   below -18°  : Night (truly dark)
+function twilightState(sunAltRad) {
+  const altDeg = sunAltRad * 180 / Math.PI;
+  if (altDeg > 0) return { name: 'Day', emoji: '☀️', short: `Sun ${altDeg >= 0 ? '+' : ''}${altDeg.toFixed(1)}°` };
+  if (altDeg > -6) return { name: 'Civil twilight', emoji: '🌆', short: `Sun ${altDeg.toFixed(1)}°` };
+  if (altDeg > -12) return { name: 'Nautical twilight', emoji: '🌃', short: `Sun ${altDeg.toFixed(1)}°` };
+  if (altDeg > -18) return { name: 'Astronomical twilight', emoji: '🌌', short: `Sun ${altDeg.toFixed(1)}°` };
+  return { name: 'Night', emoji: '⭐', short: `Sun ${altDeg.toFixed(1)}°` };
+}
+
+function twilightBarPosition(sunAltRad) {
+  // Map alt range [-30°, +60°] → [0, 100]% on the gradient bar.
+  const altDeg = sunAltRad * 180 / Math.PI;
+  const t = Math.max(-30, Math.min(60, altDeg));
+  return ((t + 30) / 90) * 100;
 }
 
 function computeSky(date) {
@@ -1791,14 +1883,49 @@ function computeSky(date) {
 
 function updateSkyPanel(date) {
   if (!skyList) return;
-  const entries = computeSky(date).filter((e) => e.name !== 'Sun');
+  const allEntries = computeSky(date);
+  const sunEntry = allEntries.find((e) => e.name === 'Sun');
+  const moonEntry = allEntries.find((e) => e.isMoon);
+  const entries = allEntries.filter((e) => e.name !== 'Sun');
   if (observer.lat === null || observer.lon === null) {
     skyList.innerHTML = '<div class="sky-empty">Set location to see horizon visibility</div>';
     return;
   }
   // Отсортировать по высоте: сначала видимые над горизонтом, потом самые высокие.
   entries.sort((a, b) => (b.alt || -Math.PI) - (a.alt || -Math.PI));
-  skyList.innerHTML = entries.map((e) => {
+
+  // Twilight header: текущее состояние неба + позиция Солнца на градиенте
+  let headerHTML = '';
+  if (sunEntry && sunEntry.alt !== null) {
+    const tw = twilightState(sunEntry.alt);
+    const pos = twilightBarPosition(sunEntry.alt);
+    headerHTML = `
+      <div class="twilight-header">
+        <span class="twilight-name">${tw.emoji} ${tw.name}</span>
+        <span class="twilight-alt">${tw.short}</span>
+      </div>
+      <div class="twilight-bar">
+        <div class="twilight-marker" style="left:${pos}%"></div>
+      </div>
+    `;
+  }
+
+  // Eclipse banners (если есть в данный момент)
+  let eclipseHTML = '';
+  if (sunEntry && moonEntry) {
+    const ec = computeEclipses(sunEntry, moonEntry);
+    if (ec.solar) {
+      const pct = Math.round(ec.solar.coverage * 100);
+      const kind = ec.solar.totality ? 'Total' : (pct > 50 ? 'Partial' : 'Grazing');
+      eclipseHTML += `<div class="eclipse-banner solar">☀️🌑 ${kind} solar eclipse · ${pct}% covered <span class="eclipse-meta">(sep ${ec.solar.sepDeg.toFixed(2)}°)</span></div>`;
+    }
+    if (ec.lunar) {
+      const pct = Math.round(ec.lunar.coverage * 100);
+      const kind = ec.lunar.totality ? 'Total' : (pct > 50 ? 'Partial' : 'Penumbral');
+      eclipseHTML += `<div class="eclipse-banner lunar">🌕🌑 ${kind} lunar eclipse · ${pct}% in umbra <span class="eclipse-meta">(from opposition ${ec.lunar.oppositionDeg.toFixed(2)}°)</span></div>`;
+    }
+  }
+  const listHTML = entries.map((e) => {
     const above = e.alt !== null && e.alt > 0;
     const altDeg = (e.alt * 180 / Math.PI).toFixed(0);
     const compass = compassFromAz(e.az);
@@ -1823,6 +1950,8 @@ function updateSkyPanel(date) {
       </div>
     `;
   }).join('');
+
+  skyList.innerHTML = headerHTML + eclipseHTML + listHTML;
 }
 
 function planetTrailPoint(planet, date, referenceFrame) {
@@ -2047,8 +2176,10 @@ function updateScene(deltaSeconds) {
       obj.moonAnchor.position.copy(state.position);
       for (const moonObj of obj.moons) {
         const angle = (simDays / moonObj.data.period) * Math.PI * 2 + moonObj.data.phase;
-        const r = moonObj.data.dist * planet.radius;
-        moonObj.mesh.position.set(r * Math.cos(angle), 0, r * Math.sin(angle));
+        // Inclined orbit position (для Луны это 5.14° + node 125°; для остальных лун
+        // inclination/node = 0 по умолчанию → flat orbit, как было раньше).
+        const moonPos = moonOrbitPosition(moonObj.data, simDays, planet.radius);
+        moonObj.mesh.position.copy(moonPos);
         // Тидальная фиксация: rotation.y = π − angle.
         // Орбита идёт (r cosα, 0, r sinα) — это вращение вокруг −Y (CW при взгляде сверху).
         // В Three.js rotation.y = +α вращает вокруг +Y (CCW). Чтобы спин совпадал
@@ -2335,10 +2466,15 @@ function onPointerDown(event) {
   const hits = raycaster.intersectObjects(selectable, false);
   if (hits.length) {
     const obj = hits[0].object;
-    // Снапим камеру к телу — только для реальных объектов с позицией.
-    // Constellations — линии на небесной сфере без точки, camera не двигаем.
+    // Снапим камеру к телу — только если это НОВЫЙ фокус. Иначе каждый клик
+    // (включая mousedown который начинает drag) ресетил камеру в preset offset,
+    // и пользователь не мог свободно вращать вокруг тела. Constellations не имеют
+    // точки фокуса — camera для них вообще не трогаем.
     if (obj.userData.type !== 'constellation') {
-      jumpToFocus(obj.userData.label);
+      const newFocus = obj.userData.label;
+      if (newFocus !== focusName) {
+        jumpToFocus(newFocus);
+      }
     }
     // На touch — закрепляем карточку чтобы пользователь успел прочитать.
     // На desktop тоже закрепим — пока не кликнут в пустое место.

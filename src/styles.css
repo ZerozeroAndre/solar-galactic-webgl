@@ -608,6 +608,86 @@ button.primary {
   border-radius: 50%;
 }
 
+/* Twilight state header — гражданские/мореходные/астрономические сумерки */
+.twilight-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 6px 8px 2px;
+  font-size: 11px;
+  color: #e2e8f0;
+}
+
+.twilight-header .twilight-name {
+  font-weight: 600;
+}
+
+.twilight-header .twilight-alt {
+  color: #94a3b8;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Градиентная полоса: ночь → астроном. → мореходный → гражданский → день
+   Соответствует диапазону Sun alt от −30° до +60°. */
+.twilight-bar {
+  position: relative;
+  height: 6px;
+  margin: 2px 8px 8px;
+  border-radius: 3px;
+  background: linear-gradient(
+    to right,
+    #020617 0%,
+    #1e1b4b 13.3%,
+    #4c1d95 20%,
+    #7c2d92 26.7%,
+    #c2410c 33.3%,
+    #fb923c 35%,
+    #fde047 36.7%,
+    #fde047 100%
+  );
+  border: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.twilight-marker {
+  position: absolute;
+  top: -3px;
+  width: 2px;
+  height: 12px;
+  background: #f8fafc;
+  transform: translateX(-50%);
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.8);
+  border-radius: 1px;
+}
+
+/* Эклипс-banner — выделяет редкое астрономическое событие */
+.eclipse-banner {
+  margin: 4px 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.eclipse-banner.solar {
+  background: rgba(251, 191, 36, 0.18);
+  border: 1px solid rgba(251, 191, 36, 0.55);
+  color: #fef3c7;
+}
+
+.eclipse-banner.lunar {
+  background: rgba(244, 114, 182, 0.16);
+  border: 1px solid rgba(244, 114, 182, 0.5);
+  color: #fce7f3;
+}
+
+.eclipse-banner .eclipse-meta {
+  color: #94a3b8;
+  font-weight: 400;
+  font-size: 10px;
+  margin-left: 6px;
+}
+
 .moon-phase {
   display: block;
   font-size: 10px;
