@@ -2285,20 +2285,18 @@ function updateScene(deltaSeconds) {
   }
 
   // ── Asteroid & Kuiper belt visibility + slow rotation ────────────────────
-  // Видимы только в solar mode + если toggle включён. Ротация на средней угловой
-  // скорости пояса (астероиды ~4.6 года, Kuiper ~250 лет) — solid-body rotation
-  // нарушает закон Кеплера для отдельных астероидов, но для декоративного
-  // облака даёт правильное ощущение движения.
-  const beltsInSolar = currentMode === 'solar';
+  // Видимы в обоих режимах (children solarRoot, дрейфуют с Sun в galactic mode —
+  // там видишь "где Solar System в галактике"). Ротация на средней угловой
+  // скорости пояса (астероиды ~4.6 года, Kuiper ~250 лет).
   if (asteroidBeltMesh) {
-    asteroidBeltMesh.visible = beltsInSolar && asteroidBeltToggle.checked;
+    asteroidBeltMesh.visible = asteroidBeltToggle.checked;
     if (asteroidBeltMesh.visible) {
       // Период 4.6 года → ω = 2π/(4.6·365.25) рад/день
       asteroidBeltMesh.rotation.y = -simDays * (2 * Math.PI / (4.6 * 365.25));
     }
   }
   if (kuiperBeltMesh) {
-    kuiperBeltMesh.visible = beltsInSolar && kuiperBeltToggle.checked;
+    kuiperBeltMesh.visible = kuiperBeltToggle.checked;
     if (kuiperBeltMesh.visible) {
       // Средний период Kuiper ~250 лет → намного медленнее
       kuiperBeltMesh.rotation.y = -simDays * (2 * Math.PI / (250 * 365.25));
@@ -2308,7 +2306,7 @@ function updateScene(deltaSeconds) {
   // Jupiter, L5 на 60° позади. Используем актуальную угловую позицию Jupiter
   // (с учётом эксцентриситета и инклинации) через состояние Кеплера.
   if (trojansAnchor) {
-    trojansAnchor.visible = beltsInSolar && trojansToggle.checked;
+    trojansAnchor.visible = trojansToggle.checked;
     if (trojansAnchor.visible) {
       const jupObj = planetObjects.get('Jupiter');
       if (jupObj && jupObj.state) {
@@ -2323,8 +2321,8 @@ function updateScene(deltaSeconds) {
 
   // ── Comets per-frame update ──────────────────────────────────────────────
   // Позиции nucleus всегда обновляем (для focus camera). Tail orientation/intensity
-  // только при видимости. При r > 5 AU хвост скрыт.
-  const cometsVisible = beltsInSolar && cometsToggle.checked;
+  // только при видимости. При r > 5 AU хвост скрыт. Видны в обоих режимах.
+  const cometsVisible = cometsToggle.checked;
   for (const c of cometObjects) {
     // Всегда обновляем Kepler-state и position — чтобы focus работал даже при toggle off.
     const state = planetState(c.data, simDate);
@@ -2413,7 +2411,8 @@ function updateScene(deltaSeconds) {
   // ВАЖНО: позиции всегда обновляются, даже если меш невидим. Иначе при focus
   // на dwarf planet (через dropdown или click) камера прыгает в (0,0,0)
   // потому что меш так и сидит на init-позиции.
-  const dwarfsVisible = dwarfPlanetsToggle.checked && currentMode === 'solar';
+  // Видны в обоих режимах (children solarRoot).
+  const dwarfsVisible = dwarfPlanetsToggle.checked;
   for (const planet of dwarfPlanets) {
     const obj = planetObjects.get(planet.name);
     if (!obj) continue;
@@ -2716,11 +2715,13 @@ function applyMode(mode) {
     }
     if (obj.moonAnchor) obj.moonAnchor.visible = cfg.showPlanets;
   }
-  // Asteroid + Kuiper belts + Trojans + Comets — только в solar mode.
-  if (asteroidBeltMesh) asteroidBeltMesh.visible = mode === 'solar' && asteroidBeltToggle.checked;
-  if (kuiperBeltMesh) kuiperBeltMesh.visible = mode === 'solar' && kuiperBeltToggle.checked;
-  if (trojansAnchor) trojansAnchor.visible = mode === 'solar' && trojansToggle.checked;
-  const cometsOn = mode === 'solar' && cometsToggle.checked;
+  // Beyond-the-planets objects — видны в обоих режимах (children solarRoot,
+  // дрейфуют с Sun в galactic). Visibility привязана к toggle и проверяется
+  // per-frame в updateScene (а тут только начальное состояние при mode switch).
+  if (asteroidBeltMesh) asteroidBeltMesh.visible = asteroidBeltToggle.checked;
+  if (kuiperBeltMesh) kuiperBeltMesh.visible = kuiperBeltToggle.checked;
+  if (trojansAnchor) trojansAnchor.visible = trojansToggle.checked;
+  const cometsOn = cometsToggle.checked;
   for (const c of cometObjects) {
     c.nucleus.visible = cometsOn;
     c.tail.visible = cometsOn;
@@ -2736,8 +2737,10 @@ function applyMode(mode) {
     c.trail.line.visible = spacecraftOn && trailsToggle.checked;
   }
 
-  // Dwarf planets — видны только в solar mode + если toggle включён.
-  const dwarfsOn = cfg.showPlanets && dwarfPlanetsToggle.checked && mode === 'solar';
+  // Dwarf planets — видны в обоих режимах. cfg.showPlanets gates на mode switch
+  // (galactic mode имеет showPlanets=true тоже, проверь MODE_CONFIG если нужно
+  // скрывать). По умолчанию: viewable wherever planets are visible.
+  const dwarfsOn = cfg.showPlanets && dwarfPlanetsToggle.checked;
   for (const planet of dwarfPlanets) {
     const obj = planetObjects.get(planet.name);
     if (!obj) continue;
