@@ -1374,8 +1374,11 @@ function updateScene(deltaSeconds) {
     : new THREE.Vector3(0, 0, 0);
   solarRoot.position.copy(sunPosition);
   solarRoot.rotation.x = inGalacticView ? ECLIPTIC_TO_GALACTIC_TILT : 0;
-  galaxyRoot.visible = galaxyToggle.checked;
-  if (galaxyPath) galaxyPath.visible = orbitPathToggle.checked;
+  // MW структура видна только в galactic mode — toggle UI всё равно скрыт в solar
+  // через .galactic-only, но checkbox state остаётся; без проверки inGalacticView
+  // синий thinDisk (HSL 0.55) и жёлтый bulge торчат на (0, 0, -180) в solar view.
+  galaxyRoot.visible = galaxyToggle.checked && inGalacticView;
+  if (galaxyPath) galaxyPath.visible = orbitPathToggle.checked && inGalacticView;
   // Градиент галактической орбиты: подсветить дугу впереди Солнца, гасить хвост.
   // Считаем только когда дуга реально видна (toggle on и не вне galactic view).
   if (galaxyPath && galaxyPath.visible && galaxyRoot.visible && inGalacticView) {
