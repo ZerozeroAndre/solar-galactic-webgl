@@ -186,6 +186,10 @@ const raycaster = new THREE.Raycaster();
 // угловой допуск ~0.68° — достаточно широкий для удобства клика, не слишком
 // агрессивный чтобы случайно ловить соседние линии.
 raycaster.params.Line.threshold = 25;
+// Points (asteroid belt, Kuiper belt, Trojans) — point-cloud raycast допуск.
+// Default 1 → почти невозможно попасть в один пиксельный астероид. 3 даёт
+// комфортное hover на любую "тучу" точек.
+raycaster.params.Points.threshold = 3;
 const pointer = new THREE.Vector2();
 const clock = new THREE.Clock();
 
@@ -1427,12 +1431,23 @@ function buildScene() {
   // Видимость управляется per-frame в updateScene по toggles.
   asteroidBeltMesh = createAsteroidBelt();
   asteroidBeltMesh.visible = false;
+  asteroidBeltMesh.userData = { type: 'population', label: 'AsteroidBelt' };
   solarRoot.add(asteroidBeltMesh);
+  selectable.push(asteroidBeltMesh);
   kuiperBeltMesh = createKuiperBelt();
   kuiperBeltMesh.visible = false;
+  kuiperBeltMesh.userData = { type: 'population', label: 'KuiperBelt' };
   solarRoot.add(kuiperBeltMesh);
+  selectable.push(kuiperBeltMesh);
   trojansAnchor = createJupiterTrojans();
   trojansAnchor.visible = false;
+  // anchor — Group, raycast целиком не работает. Помечаем child-points внутри.
+  trojansAnchor.traverse((obj) => {
+    if (obj.isPoints) {
+      obj.userData = { type: 'population', label: 'JupiterTrojans' };
+      selectable.push(obj);
+    }
+  });
   solarRoot.add(trojansAnchor);
 
   // Comets — nucleus + tail + label + trail + (опционально) orbit line.
@@ -2510,6 +2525,10 @@ function showBodyCard(object, x, y, pinned = false) {
   let html;
   if (ud.type === 'constellation') {
     html = formatConstellationCard(ud.constellationId);
+  } else if (ud.type === 'population') {
+    // Population (asteroid belt, Kuiper, Trojans) — формат тот же что у планет,
+    // но без dynamic state (это не одно тело, а коллекция).
+    html = formatBodyCard(ud.label);
   } else {
     const label = ud.label;
     const dynState = (ud.type === 'planet')
@@ -2562,9 +2581,9 @@ function onPointerDown(event) {
     const obj = hits[0].object;
     // Снапим камеру к телу — только если это НОВЫЙ фокус. Иначе каждый клик
     // (включая mousedown который начинает drag) ресетил камеру в preset offset,
-    // и пользователь не мог свободно вращать вокруг тела. Constellations не имеют
-    // точки фокуса — camera для них вообще не трогаем.
-    if (obj.userData.type !== 'constellation') {
+    // и пользователь не мог свободно вращать вокруг тела. Constellations и
+    // populations (asteroid belt, Kuiper, Trojans) не имеют точки фокуса.
+    if (obj.userData.type !== 'constellation' && obj.userData.type !== 'population') {
       const newFocus = obj.userData.label;
       if (newFocus !== focusName) {
         jumpToFocus(newFocus);

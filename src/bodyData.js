@@ -530,6 +530,51 @@ export const BODY_DATA = {
     wiki: 'https://en.wikipedia.org/wiki/Comet_Hale%E2%80%93Bopp'
   },
 
+  // ── Populations (точечные облака — не отдельные тела, а коллективы) ──────
+
+  AsteroidBelt: {
+    type: 'Population: Asteroid belt',
+    distance: '2.1 – 3.5 AU from Sun (between Mars and Jupiter)',
+    composition: 'C-type (dark carbonaceous), S-type (silicate), M-type (metallic)',
+    moons: '~1-2 million known bodies > 1 km diameter',
+    mass: '~3% of Moon\'s mass total — much sparser than Hollywood depictions',
+    facts: [
+      'Distribution is NOT uniform — has 5 visible Kirkwood gaps from Jupiter resonances',
+      'Kirkwood gaps at 2.06 AU (4:1), 2.50 (3:1), 2.82 (5:2), 2.96 (7:3), 3.27 (2:1)',
+      'Largest member: Ceres (940 km) — classified as dwarf planet since 2006',
+      'Average separation between asteroids: ~1 million km — easy to fly through'
+    ],
+    wiki: 'https://en.wikipedia.org/wiki/Asteroid_belt'
+  },
+
+  KuiperBelt: {
+    type: 'Population: Kuiper belt + scattered disc',
+    distance: '30 – 50 AU classical belt · 50 – 100+ AU scattered disc',
+    composition: 'Volatile ices: methane, ammonia, water (the "ice dwarfs")',
+    moons: '~100 000 known bodies > 100 km; possibly billions smaller',
+    facts: [
+      'Predicted by Kenneth Edgeworth (1943) and Gerard Kuiper (1951)',
+      'First member found in 1992 (1992 QB1, now named "Albion")',
+      'Source of short-period comets (period < 200 years, like Halley)',
+      'Major members: Pluto, Eris, Haumea, Makemake — all dwarf planets'
+    ],
+    wiki: 'https://en.wikipedia.org/wiki/Kuiper_belt'
+  },
+
+  JupiterTrojans: {
+    type: 'Population: Jupiter Trojan asteroids',
+    distance: '5.2 AU (same orbit as Jupiter, ±60° away)',
+    composition: 'Dark D-type asteroids — reddish, similar to outer-belt and Kuiper objects',
+    moons: '~12 000 at L4 ("Greeks") + ~5 000 at L5 ("Trojans")',
+    facts: [
+      'Gravitationally stable at Lagrange L4 and L5 points (Sun-Jupiter system)',
+      'Tadpole orbits — librate around Lagrange points with 150-200 year periods',
+      'Lucy spacecraft (NASA, launched 2021) is currently visiting them, arrives 2027',
+      'Other Lagrange points (L1, L2, L3) are unstable — no permanent populations'
+    ],
+    wiki: 'https://en.wikipedia.org/wiki/Jupiter_trojan'
+  },
+
   Sedna: {
     type: 'Dwarf planet candidate (extreme TNO)',
     mass: '~10²¹ kg  (estimated, very uncertain)',
