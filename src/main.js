@@ -1691,6 +1691,60 @@ function skyEntryForBody(name, geoPos, observerDate) {
   return { name, ra, dec, alt, az, distanceAu };
 }
 
+// Moon phase from Sun-Earth-Moon geometry.
+//   • phaseAngle α = angle Sun-Moon-Earth (Earth seen from Moon, vs Sun)
+//   • illumination k = (1 + cos α) / 2  →  0 at New, 1 at Full
+//   • Waxing vs waning: ecliptic longitude difference (Moon − Sun) from Earth
+//     - 0-180° → waxing (Moon east of Sun, follows it across sky)
+//     - 180-360° → waning (Moon west of Sun, precedes it)
+//   • Phase emoji: standard Unicode lunar phase symbols
+const PHASE_NAMES = [
+  ['New Moon', '🌑'],
+  ['Waxing Crescent', '🌒'],
+  ['First Quarter', '🌓'],
+  ['Waxing Gibbous', '🌔'],
+  ['Full Moon', '🌕'],
+  ['Waning Gibbous', '🌖'],
+  ['Last Quarter', '🌗'],
+  ['Waning Crescent', '🌘']
+];
+
+function computeMoonEntry(date, earthHelio, sunEntry) {
+  const moonData = MOONS.Earth && MOONS.Earth[0];
+  if (!moonData) return null;
+  const simDaysLocal = (date.getTime() - J2000) / MS_PER_DAY;
+  const angle = (simDaysLocal / moonData.period) * Math.PI * 2 + moonData.phase;
+  const r = moonData.dist * earthPlanet.radius;
+  // Геоцентрическое положение Луны в сценических координатах (Y=0 — упрощение,
+  // реальная орбита Луны наклонена 5.14° к эклиптике, но это <0.1° для phase).
+  const moonGeo = new THREE.Vector3(r * Math.cos(angle), 0, r * Math.sin(angle));
+  // Гелиоцентрическое положение Луны = Земля + relative
+  const moonHelio = earthHelio.clone().add(moonGeo);
+  // Phase angle = угол Sun-Moon-Earth (от Луны)
+  const moonToSun = moonHelio.clone().negate(); // Sun at origin
+  const moonToEarth = moonGeo.clone().negate();
+  const phaseAngle = moonToSun.angleTo(moonToEarth);
+  const illumination = (1 + Math.cos(phaseAngle)) / 2;
+  // Waxing/waning: разность эклиптических долгот Moon − Sun (как видит Earth)
+  const moonEcl = eclipticFromCartesian(moonGeo);
+  const sunGeoFromEarth = earthHelio.clone().negate();
+  const sunEcl = eclipticFromCartesian(sunGeoFromEarth);
+  let dLng = (moonEcl.lambda - sunEcl.lambda) * 180 / Math.PI;
+  dLng = ((dLng % 360) + 360) % 360;
+  // Маппинг 0..360° → 8 фаз (центры каждой фазы по 45°)
+  const phaseIndex = Math.floor(((dLng + 22.5) % 360) / 45);
+  const [phaseName, phaseEmoji] = PHASE_NAMES[phaseIndex];
+  const entry = skyEntryForBody('Moon', moonGeo, date);
+  entry.elongation = sphericalDistance(entry.ra, entry.dec, sunEntry.ra, sunEntry.dec);
+  entry.color = 0xdde6f5;
+  entry.isMoon = true;
+  entry.phaseName = phaseName;
+  entry.phaseEmoji = phaseEmoji;
+  entry.illumination = illumination;
+  entry.phaseAngleDeg = phaseAngle * 180 / Math.PI;
+  return entry;
+}
+
 function computeSky(date) {
   // Геоцентрические позиции: planet_helio - earth_helio. Всё в сценических ед.
   const earthHelio = planetState(earthPlanet, date).position;
@@ -1700,6 +1754,10 @@ function computeSky(date) {
   const sunGeo = earthHelio.clone().negate();
   const sunEntry = skyEntryForBody('Sun', sunGeo, date);
   entries.push(sunEntry);
+
+  // Moon — отдельная логика, фазы из геометрии Sun-Earth-Moon.
+  const moonEntry = computeMoonEntry(date, earthHelio, sunEntry);
+  if (moonEntry) entries.push(moonEntry);
 
   for (const planet of planets) {
     if (planet.name === 'Earth') continue;
@@ -1729,6 +1787,17 @@ function updateSkyPanel(date) {
     const compass = compassFromAz(e.az);
     const elongDeg = (e.elongation * 180 / Math.PI).toFixed(0);
     const colorHex = `#${e.color.toString(16).padStart(6, '0')}`;
+    if (e.isMoon) {
+      const illumPct = Math.round(e.illumination * 100);
+      const titleExtra = ` · ${e.phaseName} (${illumPct}% illuminated, phase angle ${e.phaseAngleDeg.toFixed(0)}°)`;
+      return `
+        <div class="sky-row ${above ? 'above-horizon' : 'below-horizon'}" title="Moon: RA ${(e.ra*12/Math.PI).toFixed(1)}h, Dec ${(e.dec*180/Math.PI).toFixed(0)}°, elongation ${elongDeg}° from Sun${titleExtra}">
+          <i style="background:${colorHex}"></i>
+          <span>Moon <span class="moon-phase">${e.phaseEmoji} ${e.phaseName} · ${illumPct}%</span></span>
+          <span class="sky-coord">${above ? `${compass} ${altDeg}°` : 'below horizon'}</span>
+        </div>
+      `;
+    }
     return `
       <div class="sky-row ${above ? 'above-horizon' : 'below-horizon'}" title="${e.name}: RA ${(e.ra*12/Math.PI).toFixed(1)}h, Dec ${(e.dec*180/Math.PI).toFixed(0)}°, ${e.distanceAu.toFixed(2)} AU, elongation ${elongDeg}° from Sun">
         <i style="background:${colorHex}"></i>
