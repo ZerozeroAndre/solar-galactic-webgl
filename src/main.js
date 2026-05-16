@@ -625,48 +625,13 @@ function addMilkyWayDisk() {
   // только volumetric-слои ниже, которые физически репрезентируют структуру МП:
   // балдж (сфера), тонкий диск, толстый диск, гало.
 
-  // ── Слой 2: сферический балдж ────────────────────────────────────────────
-  // Реалистичный размер: ~3 kpc радиус → 180 × 3/8 ≈ 68 ед.
-  const bulgeRadius = 70;
-  const bulgeGeom = new THREE.SphereGeometry(bulgeRadius, 64, 32);
-  const bulgeMat = new THREE.ShaderMaterial({
-    transparent: true,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false,
-    side: THREE.FrontSide,
-    fog: false,
-    uniforms: {
-      bulgeColor: { value: new THREE.Color(0xffd8a0) }
-    },
-    vertexShader: `
-      varying vec3 vNormal;
-      varying vec3 vViewPos;
-      void main() {
-        vNormal = normalize(normalMatrix * normal);
-        vec4 mv = modelViewMatrix * vec4(position, 1.0);
-        vViewPos = mv.xyz;
-        gl_Position = projectionMatrix * mv;
-      }
-    `,
-    fragmentShader: `
-      uniform vec3 bulgeColor;
-      varying vec3 vNormal;
-      varying vec3 vViewPos;
-      void main() {
-        vec3 viewDir = normalize(-vViewPos);
-        // Брайтнесс падает к силуэту (fresnel) — даёт мягкий glowing-шарик
-        // вместо матового шара. Внутренние пиксели ярче, края растворяются.
-        float ndv = abs(dot(vNormal, viewDir));
-        float a = pow(ndv, 1.5) * 0.85;
-        gl_FragColor = vec4(bulgeColor, a);
-      }
-    `
-  });
-  const bulge = new THREE.Mesh(bulgeGeom, bulgeMat);
-  bulge.position.set(0, 0, -GALACTIC_RADIUS_SCENE);
-  bulge.name = 'Milky Way bulge';
-  bulge.renderOrder = 4;
-  galaxyRoot.add(bulge);
+  // Bulge (жёлтая сфера в позиции Sgr A*) удалён по решению дизайна:
+  // выделение центра противоречит идее "движение без видимого центра МП".
+  // Реальный Sgr A* — сверхмассивная чёрная дыра, визуально невидим.
+  // Bulge — это распределённое звёздное население, не точечный объект; в
+  // диск-слоях его звёзды учтены через повышенную плотность точек у центра.
+
+  const bulgeRadius = 70; // используется ниже в плотности диска
 
   // ── Слой 3: тонкий диск (thin disk) ──────────────────────────────────────
   // Молодые звёзды (популяция I) — голубоватые O/B/A в рукавах + жёлтые G на радии Солнца.
