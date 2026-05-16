@@ -43,6 +43,7 @@ const nbodyToggle = document.querySelector('#nbodyToggle');
 const dwarfPlanetsToggle = document.querySelector('#dwarfPlanetsToggle');
 const asteroidBeltToggle = document.querySelector('#asteroidBeltToggle');
 const kuiperBeltToggle = document.querySelector('#kuiperBeltToggle');
+const trojansToggle = document.querySelector('#trojansToggle');
 const nbodyTmpVec = new THREE.Vector3();
 const labelsToggle = document.querySelector('#labelsToggle');
 const planetList = document.querySelector('#planetList');
@@ -770,6 +771,70 @@ function createKuiperBelt() {
   return points;
 }
 
+// Jupiter Trojans — две группы астероидов в стабильных точках Лагранжа L4 и L5
+// (60° впереди и позади Jupiter в его орбите). Реальных Trojans известно
+// ~12 000 (Greeks at L4) + ~5 000 (Trojans at L5).
+//
+// Подход: точки генерируются в локальном фрейме (Jupiter at scene angle 0°),
+// затем anchor-group вращается по Y чтобы следовать за реальной угловой
+// позицией Jupiter каждый frame. Локально:
+//   L4 кластер: angle = +60° ± libration
+//   L5 кластер: angle = −60° ± libration
+//
+// Libration: реальное движение астероида вокруг точки Лагранжа — tadpole
+// orbit с амплитудой ~10° по углу + ~0.3 AU по радиусу + ~10° по инклинации.
+// Период libration ~150-200 лет — намного медленнее frame-rate, поэтому
+// показываем статическое snapshot распределения.
+function createJupiterTrojans() {
+  const N_PER_CLUSTER = 2500;
+  const N = N_PER_CLUSTER * 2;
+  const positions = new Float32Array(N * 3);
+  const colors = new Float32Array(N * 3);
+  const sizes = new Float32Array(N);
+  const color = new THREE.Color();
+  const JUPITER_A = 5.2; // AU — same as Jupiter's semi-major axis
+  for (let cluster = 0; cluster < 2; cluster += 1) {
+    // L4 ahead (+60°), L5 behind (−60°). В нашей сцене orbits CCW глядя с +Y,
+    // т.е. "ahead" = larger angle. Будет повёрнуто anchor'ом.
+    const baseAngle = cluster === 0 ? 60 * DEG : -60 * DEG;
+    for (let i = 0; i < N_PER_CLUSTER; i += 1) {
+      // Tadpole libration в угле — гауссиан σ=8°
+      const angleJitter = ((Math.random() + Math.random() + Math.random()) / 3 - 0.5) * 2 * 8 * DEG;
+      const angle = baseAngle + angleJitter;
+      // Радиальная libration — гауссиан σ=0.15 AU
+      const rJitter = ((Math.random() + Math.random()) - 1) * 0.3;
+      const r = JUPITER_A + rJitter;
+      // Инклинация ±10°
+      const incl = (Math.random() - 0.5) * 2 * 10 * DEG;
+      const sinI = Math.sin(incl);
+      const cosI = Math.cos(incl);
+      const idx = cluster * N_PER_CLUSTER + i;
+      positions[idx * 3] = r * Math.cos(angle) * cosI * AU_SCALE;
+      positions[idx * 3 + 1] = r * sinI * AU_SCALE;
+      positions[idx * 3 + 2] = r * Math.sin(angle) * cosI * AU_SCALE;
+      // Цвет: D-type asteroids — тёмные, красноватые (типично для Trojans)
+      color.setHSL(0.03 + Math.random() * 0.05, 0.3 + Math.random() * 0.2, 0.3 + Math.random() * 0.18);
+      colors[idx * 3] = color.r;
+      colors[idx * 3 + 1] = color.g;
+      colors[idx * 3 + 2] = color.b;
+      sizes[idx] = 0.7 + Math.random() * (Math.random() < 0.04 ? 1.6 : 0.5);
+    }
+  }
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geom.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  geom.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+  const points = new THREE.Points(geom, buildBeltShaderMaterial());
+  points.name = 'Jupiter Trojans';
+  points.renderOrder = 2;
+  points.frustumCulled = false;
+  // Anchor — group что вращается чтобы следовать за реальной угловой позицией Jupiter
+  const anchor = new THREE.Group();
+  anchor.name = 'Trojans anchor';
+  anchor.add(points);
+  return anchor;
+}
+
 function addMilkyWayDisk() {
   // ── Слой 1 (плоская ESO-текстура) — УДАЛЁН ─────────────────────────────
   // Плоский PlaneGeometry со sticker-видом галактики не имел физического смысла
@@ -1088,6 +1153,7 @@ function addGalaxyPath() {
 
 let asteroidBeltMesh = null;
 let kuiperBeltMesh = null;
+let trojansAnchor = null;
 
 function buildScene() {
   addSkybox();
@@ -1104,6 +1170,9 @@ function buildScene() {
   kuiperBeltMesh = createKuiperBelt();
   kuiperBeltMesh.visible = false;
   solarRoot.add(kuiperBeltMesh);
+  trojansAnchor = createJupiterTrojans();
+  trojansAnchor.visible = false;
+  solarRoot.add(trojansAnchor);
 
   const sunGeometry = new THREE.SphereGeometry(1.35, 64, 32);
   // Солнце светится самостоятельно — MeshBasicMaterial с текстурой.
@@ -1691,6 +1760,22 @@ function updateScene(deltaSeconds) {
       kuiperBeltMesh.rotation.y = -simDays * (2 * Math.PI / (250 * 365.25));
     }
   }
+  // Jupiter Trojans — anchor вращается чтобы L4 кластер оказался на +60° впереди
+  // Jupiter, L5 на 60° позади. Используем актуальную угловую позицию Jupiter
+  // (с учётом эксцентриситета и инклинации) через состояние Кеплера.
+  if (trojansAnchor) {
+    trojansAnchor.visible = beltsInSolar && trojansToggle.checked;
+    if (trojansAnchor.visible) {
+      const jupObj = planetObjects.get('Jupiter');
+      if (jupObj && jupObj.state) {
+        const jp = jupObj.state.position;
+        // Three.js rotation.y = θ берёт локальный угол α → world (α − θ). Чтобы
+        // локальный +60° оказался на (θ_J + 60°), нужно rotation.y = −θ_J.
+        const jupiterAngle = Math.atan2(jp.z, jp.x);
+        trojansAnchor.rotation.y = -jupiterAngle;
+      }
+    }
+  }
 
   // ── Dwarf planets per-frame update ────────────────────────────────────────
   // Тот же pipeline что у регулярных планет, но без N-body override и без axial
@@ -1992,9 +2077,10 @@ function applyMode(mode) {
     }
     if (obj.moonAnchor) obj.moonAnchor.visible = cfg.showPlanets;
   }
-  // Asteroid + Kuiper belts — только в solar mode.
+  // Asteroid + Kuiper belts + Trojans — только в solar mode.
   if (asteroidBeltMesh) asteroidBeltMesh.visible = mode === 'solar' && asteroidBeltToggle.checked;
   if (kuiperBeltMesh) kuiperBeltMesh.visible = mode === 'solar' && kuiperBeltToggle.checked;
+  if (trojansAnchor) trojansAnchor.visible = mode === 'solar' && trojansToggle.checked;
 
   // Dwarf planets — видны только в solar mode + если toggle включён.
   const dwarfsOn = cfg.showPlanets && dwarfPlanetsToggle.checked && mode === 'solar';
