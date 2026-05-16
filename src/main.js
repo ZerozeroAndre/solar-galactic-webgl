@@ -589,6 +589,7 @@ function refreshTrail(trail, currentTimeMs) {
 // (stars_milky_way.jpg, 2K equirectangular). Equirectangular UV-маппинг
 // автоматически кладёт яркую полосу МП на экватор геометрии — это совпадает
 // с XZ-плоскостью нашей сцены (= галактическая плоскость).
+let skyboxMesh = null;
 function addSkybox() {
   const tex = loadTex('/textures/stars_milky_way.jpg', true);
   const geometry = new THREE.SphereGeometry(2200, 64, 32);
@@ -601,6 +602,7 @@ function addSkybox() {
   const sky = new THREE.Mesh(geometry, material);
   sky.name = 'Milky Way skybox';
   starRoot.add(sky);
+  skyboxMesh = sky;
 }
 
 // Гибридная визуализация МП — три слоя дают одновременно фотореалистичный
@@ -1386,8 +1388,12 @@ function updateScene(deltaSeconds) {
     sunLocal.y = -0.02; // путь лежит на y=-0.02, выравниваем для корректного поиска
     updateOrbitGradient(galaxyPath, sunLocal);
   }
-  starsGroup.visible = starsToggle.checked;
-  constellationsGroup.visible = constellationsToggle.checked;
+  // Звёзды, созвездия и MW skybox — только в galactic view. В solar mode они
+  // не должны рендериться: при zoom out пользователь видит круг из звёзд /
+  // голубоватую полосу MW-skybox на чёрном фоне.
+  starsGroup.visible = starsToggle.checked && inGalacticView;
+  constellationsGroup.visible = constellationsToggle.checked && inGalacticView;
+  if (skyboxMesh) skyboxMesh.visible = inGalacticView;
   dateLabel.textContent = simDate.toISOString().slice(0, 10);
 
   const sunObject = planetObjects.get('Sun');
