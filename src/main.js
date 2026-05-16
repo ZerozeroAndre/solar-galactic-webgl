@@ -36,6 +36,7 @@ const focusSelect = document.querySelector('#focusSelect');
 const frameSelect = document.querySelector('#frameSelect');
 const trailsToggle = document.querySelector('#trailsToggle');
 const galaxyToggle = document.querySelector('#galaxyToggle');
+const orbitPathToggle = document.querySelector('#orbitPathToggle');
 const labelsToggle = document.querySelector('#labelsToggle');
 const planetList = document.querySelector('#planetList');
 const tooltip = document.querySelector('#tooltip');
@@ -1371,8 +1372,10 @@ function updateScene(deltaSeconds) {
   solarRoot.position.copy(sunPosition);
   solarRoot.rotation.x = inGalacticView ? ECLIPTIC_TO_GALACTIC_TILT : 0;
   galaxyRoot.visible = galaxyToggle.checked;
+  if (galaxyPath) galaxyPath.visible = orbitPathToggle.checked;
   // Градиент галактической орбиты: подсветить дугу впереди Солнца, гасить хвост.
-  if (galaxyPath && galaxyPath.visible && inGalacticView) {
+  // Считаем только когда дуга реально видна (toggle on и не вне galactic view).
+  if (galaxyPath && galaxyPath.visible && galaxyRoot.visible && inGalacticView) {
     const sunLocal = sunGalacticPosition(simDate, galacticReferenceDate);
     sunLocal.y = -0.02; // путь лежит на y=-0.02, выравниваем для корректного поиска
     updateOrbitGradient(galaxyPath, sunLocal);
